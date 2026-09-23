@@ -175,6 +175,12 @@ class VerificationStatus(str, Enum):
     VERIFIED = "VERIFIED"
     NOT_VERIFIED = "NOT_VERIFIED"
     INCONCLUSIVE = "INCONCLUSIVE"
+
+class RequirementLifecycleStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    BLOCKED = "blocked"
     
 class EvidenceType(str, Enum):
     FILE_EXISTS = "FILE_EXISTS"
@@ -207,9 +213,13 @@ class EvidenceRecord(BaseModel):
 
 class Requirement(BaseModel):
     requirement_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str = "Untitled Requirement"
     description: str
     priority: str = "HIGH"
     status: VerificationStatus = VerificationStatus.PENDING
+    lifecycle_status: RequirementLifecycleStatus = RequirementLifecycleStatus.PENDING
+    acceptance_criteria: List[str] = Field(default_factory=list)
+    source_text: Optional[str] = None
     implementation_references: List[str] = Field(default_factory=list)
     evidence_references: List[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
