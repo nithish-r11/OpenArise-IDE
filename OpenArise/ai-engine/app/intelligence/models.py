@@ -16,6 +16,7 @@ class TimelineEventType(str, Enum):
     EVIDENCE_LINKED = "EVIDENCE_LINKED"
     HEALTH_CHECKED = "HEALTH_CHECKED"
     DRIFT_DETECTED = "DRIFT_DETECTED"
+    AGENT_STATE_CHANGED = "AGENT_STATE_CHANGED"
 
 class DriftState(str, Enum):
     NO_DRIFT = "NO_DRIFT"
@@ -52,6 +53,8 @@ class RequirementBaseline(BaseModel):
     requirement_id: str
     content_hash: Optional[str] = None
     acceptance_criteria_hash: Optional[str] = None
+    implementation_hashes: Dict[str, str] = Field(default_factory=dict)
+    task_feature_ids: Dict[str, str] = Field(default_factory=dict)
     associated_feature_ids: List[str] = Field(default_factory=list)
     associated_task_ids: List[str] = Field(default_factory=list)
     implementation_ids: List[str] = Field(default_factory=list)

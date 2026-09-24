@@ -1,3 +1,5 @@
+> Historical Person 1 handover. Current hardened behavior: [integration handover](../docs/INTEGRATION_HANDOVER.md) and [backend process contract](../docs/BACKEND_PROCESS_CONTRACT.md). Historical test counts and approval/regeneration assumptions below are superseded.
+
 # Person 1 Handover: AI & Agent Engine (Phases 1-7)
 
 This document serves as the official handover artifact for the AI Engine layer of OpenArise IDE, completed in Phases 1-7. It outlines the responsibilities, architecture, directories, contracts, and known limitations to allow Person 2 (Backend/Services) and Person 3 (Frontend/UI) to seamlessly integrate with the engine.

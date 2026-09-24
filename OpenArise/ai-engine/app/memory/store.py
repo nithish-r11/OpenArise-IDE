@@ -1,5 +1,6 @@
 import sqlite3
 import os
+from pathlib import Path
 import json
 import logging
 from typing import List, Optional, Dict, Any
@@ -16,6 +17,8 @@ class SQLiteMemoryStore:
         self.project_root = os.path.abspath(project_root)
         self.db_dir = os.path.join(self.project_root, ".openarise", "memory")
         self.db_path = os.path.join(self.db_dir, "memory.sqlite")
+        if not Path(self.db_path).resolve().is_relative_to(Path(self.project_root).resolve()):
+            raise ValueError("Memory path escapes the project root.")
         self.redactor = SecretRedactor()
         self._ensure_db()
         
@@ -92,7 +95,7 @@ class SQLiteMemoryStore:
                 record.memory_id, record.project_id, record.session_id, record.failure_id,
                 record.failure_signature, record.tool_name, record.category.value, summary,
                 root_cause, record.diagnosis_confidence.value, record.affected_file,
-                self._to_json(record.recovery_plan), self._to_json(record.recovery_actions),
+                self._to_json(self.redactor.redact_dict(record.recovery_plan or {})), self._to_json(record.recovery_actions),
                 self._to_json(test_evidence), record.outcome.value if record.outcome else None,
                 1 if record.rollback_performed else 0, record.attempt_count,
                 record.created_at, record.updated_at, self._to_json(record.tags)

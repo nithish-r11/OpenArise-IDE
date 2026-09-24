@@ -52,7 +52,7 @@ class ProjectStateManager:
         prev_modules = {m.relative_path: m for m in self.state.python_modules} if self.state else {}
         
         for f in files:
-            if f.file_type == 'py':
+            if f.file_type == 'py' and f.content_hash and not self.scanner._is_sensitive(Path(f.relative_path).name):
                 # Skip re-parsing if content hash is identical
                 if f.content_hash and f.content_hash == prev_hashes.get(f.relative_path) and f.relative_path in prev_modules:
                     mod_info = prev_modules[f.relative_path]

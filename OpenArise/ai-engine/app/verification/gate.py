@@ -1,62 +1,39 @@
-import logging
-from typing import List
-from app.models.schemas import Requirement, VerificationStatus, VerificationResult, CompletionReport, RequirementResult
+from app.models.schemas import VerificationStatus, VerificationResult, CompletionReport, EvidenceType
 from app.verification.engine import IndependentVerifier
 
-logger = logging.getLogger(__name__)
 
 class CompletionGate:
-    """Evaluates final verification results and prevents false completion."""
-    
+    """The final verification authority; failures dominate regardless of requirement order."""
+
     def __init__(self, verifier: IndependentVerifier):
         self.verifier = verifier
-        
-    def evaluate(self, project_id: str, requirements: List[Requirement]) -> VerificationResult:
-        """Runs the independent verification and builds the CompletionReport."""
-        req_results: List[RequirementResult] = []
-        verified_count = 0
-        partially_verified = 0
-        inconclusive = 0
-        unverified = 0
-        
-        overall_status = VerificationStatus.VERIFIED
-        
-        for req in requirements:
-            res = self.verifier.verify_requirement(req)
-            req.status = res.status
-            req_results.append(res)
-            
-            if res.status == VerificationStatus.VERIFIED:
-                verified_count += 1
-            elif res.status == VerificationStatus.PARTIALLY_VERIFIED:
-                partially_verified += 1
-                if overall_status == VerificationStatus.VERIFIED:
-                    overall_status = VerificationStatus.PARTIALLY_VERIFIED
-            elif res.status == VerificationStatus.INCONCLUSIVE:
-                inconclusive += 1
-                overall_status = VerificationStatus.INCONCLUSIVE
-            elif res.status == VerificationStatus.NOT_VERIFIED:
-                unverified += 1
-                overall_status = VerificationStatus.NOT_VERIFIED
-                
-        # If there are no requirements, we can't be VERIFIED
-        if not requirements:
-            overall_status = VerificationStatus.INCONCLUSIVE
-            
+
+    def evaluate(self, project_id, requirements, recovery_attempts=0):
+        results = []
+        for requirement in requirements:
+            result = self.verifier.verify_requirement(requirement)
+            requirement.status = result.status
+            results.append(result)
+        priority = {
+            VerificationStatus.VERIFIED: 0,
+            VerificationStatus.PARTIALLY_VERIFIED: 1,
+            VerificationStatus.INCONCLUSIVE: 2,
+            VerificationStatus.NOT_VERIFIED: 3,
+        }
+        overall = max((r.status for r in results), key=priority.get) if results else VerificationStatus.INCONCLUSIVE
+        records = [record for req in requirements for record in self.verifier.ledger.get_by_requirement(req.requirement_id)]
+        test_calls = {record.tool_call_id or record.evidence_id for record in records
+                      if record.evidence_type in (EvidenceType.TEST_PASS, EvidenceType.TEST_FAIL)}
         report = CompletionReport(
             total_requirements=len(requirements),
-            verified=verified_count,
-            partially_verified=partially_verified,
-            unverified=unverified,
-            inconclusive=inconclusive,
-            evidence_count=len(self.verifier.ledger._records),
-            tests_executed=0, # To be populated by evidence
-            recovery_attempts=0
+            verified=sum(r.status == VerificationStatus.VERIFIED for r in results),
+            partially_verified=sum(r.status == VerificationStatus.PARTIALLY_VERIFIED for r in results),
+            unverified=sum(r.status == VerificationStatus.NOT_VERIFIED for r in results),
+            inconclusive=sum(r.status == VerificationStatus.INCONCLUSIVE for r in results),
+            evidence_count=len(records), tests_executed=len(test_calls),
+            recovery_attempts=recovery_attempts,
+            remaining_issues=[r.explanation for r in results if r.status != VerificationStatus.VERIFIED],
         )
-        
         return VerificationResult(
-            project_id=project_id,
-            requirement_results=req_results,
-            overall_status=overall_status,
-            report=report
+            project_id=project_id, requirement_results=results, overall_status=overall, report=report
         )

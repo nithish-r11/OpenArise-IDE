@@ -70,6 +70,7 @@ Evidence: {failure.evidence}
                 schema=RecoveryPlan,
                 system_prompt=PLANNER_SYSTEM_PROMPT
             )
+            plan = RecoveryPlan.model_validate(plan)
             plan.failure_id = failure.failure_id
             
             # Determine Risk and Permission automatically based on proposed actions

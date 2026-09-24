@@ -1,3 +1,4 @@
+import uuid
 from typing import Dict, List, Optional
 from app.traceability.models import TraceabilityGraph, TraceabilityLink, ImplementationNode, TestNode, LinkType
 
@@ -30,7 +31,11 @@ class TraceabilityGraphManager:
             self.graph.evidence.append(evidence_id)
             
     def add_link(self, source_id: str, target_id: str, link_type: LinkType, evidence_backed: bool = False, is_inferred: bool = False):
+        for existing in self.graph.links:
+            if (existing.source_id, existing.target_id, existing.link_type) == (source_id, target_id, link_type):
+                return
         link = TraceabilityLink(
+            link_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{self.graph.project_id}:{source_id}:{link_type.value}:{target_id}")),
             source_id=source_id,
             target_id=target_id,
             link_type=link_type,

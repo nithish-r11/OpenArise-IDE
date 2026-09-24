@@ -11,6 +11,10 @@ class ErrorCode(str, Enum):
     PERMISSION_REQUIRED = "permission_required"
     VERIFICATION_UNAVAILABLE = "verification_unavailable"
     INTERNAL_ERROR = "internal_error"
+    INVALID_REQUEST = "invalid_request"
+    REQUEST_NOT_FOUND = "request_not_found"
+    ACTION_CONFLICT = "action_conflict"
+    SERVICE_CLOSED = "service_closed"
 
 class ApiError(Exception):
     def __init__(self, code: ErrorCode, message: str, details: Optional[Dict[str, Any]] = None):

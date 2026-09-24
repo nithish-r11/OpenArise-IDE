@@ -1,66 +1,62 @@
-import os
 import shutil
 import uuid
-import logging
-from typing import List, Dict, Optional
+from pathlib import Path
+from app.tools.fs import _is_safe_path
 
-logger = logging.getLogger(__name__)
 
 class CheckpointManager:
-    """Manages lightweight snapshots of specific files inside the sandbox."""
-    
+    """Per-file snapshots and rollback inside the project; no OS-level isolation."""
+
     def __init__(self, project_root: str):
-        self.project_root = os.path.abspath(project_root)
-        self.checkpoints_dir = os.path.join(self.project_root, ".openarise", "checkpoints")
-        self._ensure_dir()
-        
-    def _ensure_dir(self):
-        if not os.path.exists(self.checkpoints_dir):
-            os.makedirs(self.checkpoints_dir)
-            
+        self.project_root = str(Path(project_root).resolve())
+        self.checkpoints_dir = str(Path(self.project_root) / ".openarise" / "checkpoints")
+        if not Path(self.checkpoints_dir).resolve().is_relative_to(Path(self.project_root)):
+            raise ValueError("Checkpoint directory escapes the project root.")
+        Path(self.checkpoints_dir).mkdir(parents=True, exist_ok=True)
+        self._new_files = {}
+
     def _is_safe_path(self, path: str) -> bool:
-        abs_path = os.path.abspath(os.path.join(self.project_root, path))
-        return abs_path.startswith(self.project_root)
-        
-    def create_checkpoint(self, files: List[str]) -> str:
-        """Creates a snapshot of the specific files, returns checkpoint_id."""
+        return _is_safe_path(self.project_root, path)
+
+    def create_checkpoint(self, files):
+        if any(not self._is_safe_path(file) for file in files):
+            raise ValueError("Unsafe checkpoint file.")
         checkpoint_id = str(uuid.uuid4())
-        checkpoint_path = os.path.join(self.checkpoints_dir, checkpoint_id)
-        os.makedirs(checkpoint_path)
-        
+        checkpoint_path = Path(self.checkpoints_dir) / checkpoint_id
+        checkpoint_path.mkdir()
+        self._new_files[checkpoint_id] = []
         for file in files:
-            if not self._is_safe_path(file):
-                logger.warning(f"Skipping unsafe path in checkpoint: {file}")
-                continue
-                
-            abs_src = os.path.join(self.project_root, file)
-            if os.path.exists(abs_src):
-                abs_dest = os.path.join(checkpoint_path, file)
-                os.makedirs(os.path.dirname(abs_dest), exist_ok=True)
-                shutil.copy2(abs_src, abs_dest)
-                
+            source = Path(self.project_root) / file
+            if source.is_file():
+                destination = checkpoint_path / file
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+            elif not source.exists():
+                self._new_files[checkpoint_id].append(file)
         return checkpoint_id
-        
-    def rollback_checkpoint(self, checkpoint_id: str) -> bool:
-        """Restores files from a specific checkpoint."""
-        checkpoint_path = os.path.join(self.checkpoints_dir, checkpoint_id)
-        if not os.path.exists(checkpoint_path):
-            logger.error(f"Checkpoint not found: {checkpoint_id}")
-            return False
-            
+
+    def rollback_checkpoint(self, checkpoint_id):
         try:
-            for root, _, files in os.walk(checkpoint_path):
-                for file in files:
-                    abs_src = os.path.join(root, file)
-                    rel_path = os.path.relpath(abs_src, checkpoint_path)
-                    abs_dest = os.path.join(self.project_root, rel_path)
-                    
-                    if not self._is_safe_path(rel_path):
-                        continue
-                        
-                    os.makedirs(os.path.dirname(abs_dest), exist_ok=True)
-                    shutil.copy2(abs_src, abs_dest)
+            if str(uuid.UUID(checkpoint_id)) != checkpoint_id:
+                return False
+            checkpoint_path = Path(self.checkpoints_dir) / checkpoint_id
+            if not checkpoint_path.is_dir() or not checkpoint_path.resolve().is_relative_to(Path(self.checkpoints_dir).resolve()):
+                return False
+            for source in checkpoint_path.rglob("*"):
+                if not source.is_file():
+                    continue
+                relative = source.relative_to(checkpoint_path)
+                if not source.resolve().is_relative_to(checkpoint_path.resolve()) or not self._is_safe_path(str(relative)):
+                    return False
+                destination = Path(self.project_root) / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+            for file in self._new_files.get(checkpoint_id, []):
+                if not self._is_safe_path(file):
+                    return False
+                destination = Path(self.project_root) / file
+                if destination.is_file():
+                    destination.unlink()
             return True
-        except Exception as e:
-            logger.error(f"Rollback failed: {e}")
+        except (ValueError, OSError):
             return False

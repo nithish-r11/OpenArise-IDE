@@ -29,6 +29,10 @@ class PermissionManager:
             
     def grant_approval(self, tool_call_id: str):
         self._approvals[tool_call_id] = True
+
+    def revoke_approval(self, tool_call_id: str):
+        """Approvals are single-use and must not outlive their action."""
+        self._approvals.pop(tool_call_id, None)
         
     def check_permission(self, tool_call_id: str, risk: RiskLevel) -> bool:
         """Returns True if execution is allowed, False if permission is denied or required."""

@@ -1,5 +1,7 @@
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
+from app.context.adapter import bounded_intelligence_summary
+from app.memory.redact import SecretRedactor
 
 @dataclass
 class ContextManager:
@@ -35,12 +37,19 @@ class ContextManager:
         
     def get_context_summary(self) -> Dict[str, Any]:
         """Returns a summary of the current context for the LLM."""
-        return {
+        summary = {
             "user_request": self.user_request,
             "project_root": self.project_root,
-            "selected_files": self.selected_files,
+            "selected_files": self.selected_files[:20],
             "code_snippets": len(self.relevant_code),
-            "recent_terminal": self.terminal_output[-5:] if self.terminal_output else [],
-            "recent_tools": self.tool_results[-5:] if self.tool_results else [],
+            "recent_terminal": [SecretRedactor().redact(line[:1000]) for line in self.terminal_output[-5:]],
+            "recent_tools": [
+                {key: result.get(key) for key in ("tool_name", "tool_call_id", "success", "exit_code")}
+                for result in self.tool_results[-5:]
+            ],
             "failures": len(self.previous_failures)
         }
+        intelligence = bounded_intelligence_summary(self.project_state.get("intelligence_summary"))
+        if intelligence:
+            summary["intelligence_summary"] = intelligence
+        return summary

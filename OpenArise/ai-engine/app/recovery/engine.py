@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 from app.models.schemas import (
     FailureEvent, RecoveryPlan, RecoveryResult, RecoveryState, 
-    ToolResult, DiagnosisResult
+    ToolResult, DiagnosisResult, FailureCategory
 )
 from app.recovery.checkpoint import CheckpointManager
 from app.recovery.policy import RecoveryPolicyManager
@@ -49,14 +49,49 @@ class RecoveryEngine:
             result.final_result = "Failed to create recovery plan."
             return result
             
-        # 2. PERMISSION
+        call_ids = [action.tool_call_id for action in plan.proposed_actions]
+        if len(call_ids) != len(set(call_ids)) or any(not value for value in call_ids):
+            result.status = RecoveryState.BLOCKED
+            result.final_result = "Recovery tool call IDs must be unique and nonempty."
+            return result
+        if len(plan.proposed_actions) > self.policy.policy.max_actions_per_cycle:
+            result.status = RecoveryState.BLOCKED
+            result.final_result = "Recovery action limit exceeded."
+            return result
+
+        # Recovery never inherits approval merely from a model's declared risk.
         result.status = RecoveryState.PERMISSION_REQUIRED
         for action in plan.proposed_actions:
             if not self.permission_manager.check_permission(plan.recovery_id, plan.risk_level):
                 result.status = RecoveryState.BLOCKED
                 result.final_result = "Permission Denied or ASK."
                 return result
-                
+            try:
+                tool = self.tool_registry.get_tool(action.tool_name)
+            except KeyError:
+                result.status = RecoveryState.BLOCKED
+                result.final_result = "Recovery tool is unavailable."
+                return result
+            if not self.permission_manager.check_permission(action.tool_call_id, tool.risk_level):
+                result.status = RecoveryState.BLOCKED
+                result.final_result = "Permission required for the exact recovery tool call."
+                return result
+        if failure.category in (FailureCategory.IMPORT_ERROR, FailureCategory.DEPENDENCY_ERROR):
+            result.status = RecoveryState.BLOCKED
+            result.final_result = "Automatic dependency installation is disabled."
+            return result
+        try:
+            test_tool = self.tool_registry.get_tool("execute_tests")
+        except KeyError:
+            result.status = RecoveryState.BLOCKED
+            result.final_result = "Recovery validation tool is unavailable."
+            return result
+        retest_id = plan.recovery_id + ":retest"
+        if not self.permission_manager.check_permission(retest_id, test_tool.risk_level):
+            result.status = RecoveryState.BLOCKED
+            result.final_result = "Permission required for recovery validation."
+            return result
+
         # 3. CHECKPOINT
         result.status = RecoveryState.CHECKPOINTING
         files_to_backup = []
@@ -73,10 +108,25 @@ class RecoveryEngine:
         for action in plan.proposed_actions:
             try:
                 tool = self.tool_registry.get_tool(action.tool_name)
-                output = tool.execute(**action.arguments)
+                if not self.permission_manager.check_permission(action.tool_call_id, tool.risk_level):
+                    result.status = RecoveryState.BLOCKED
+                    result.final_result = "Recovery tool permission was revoked."
+                    self._rollback(result)
+                    return result
+                try:
+                    output = tool.execute(**action.arguments)
+                finally:
+                    self.permission_manager.revoke_approval(action.tool_call_id)
                 result.actions_executed.append(action.tool_name)
+                if isinstance(output, dict) and (output.get("exit_code") not in (None, 0) or output.get("error") or output.get("success") is False):
+                    result.status = RecoveryState.FAILED
+                    result.final_result = "Recovery action returned a failure."
+                    self._rollback(result)
+                    return result
             except Exception as e:
                 logger.error(f"Recovery action failed: {e}")
+                result.status = RecoveryState.FAILED
+                result.final_result = "Recovery action raised an exception."
                 self._rollback(result)
                 return result
                 
@@ -85,25 +135,24 @@ class RecoveryEngine:
         # For simplicity in MVP, if there's a test tool, run it. Otherwise assume failure tool.
         # Ideally, run the same tool that failed.
         try:
-            tool = self.tool_registry.get_tool(failure.tool_name)
-            # Reconstruct arguments from evidence if possible, or just run tests
-            # A true retest would have the exact arguments, but we don't have them in FailureEvent easily.
-            # In a real system, the orchestrator should pass the original tool call.
-            # We will use execute_tests as a generic validation if tool_name is test, or we'll just return RECOVERED
-            # and let the Orchestrator loop retest if needed. The prompt says "Execute the smallest relevant test".
-            
-            # Since we can't easily guess original args without saving them, we run 'execute_tests'
-            # to validate if we fixed syntax/imports.
-            test_tool = self.tool_registry.get_tool("execute_tests")
-            test_output = test_tool.execute()
+            if not self.permission_manager.check_permission(retest_id, test_tool.risk_level):
+                result.status = RecoveryState.BLOCKED
+                result.final_result = "Recovery validation permission was revoked."
+                self._rollback(result)
+                return result
+            try:
+                test_output = test_tool.execute()
+            finally:
+                self.permission_manager.revoke_approval(retest_id)
             result.tests_run.append("execute_tests")
             
             # Detect failure on the test
             res = ToolResult(
                 tool_name="execute_tests",
-                tool_call_id="retest",
+                tool_call_id=retest_id,
                 success=(test_output.get("exit_code") == 0),
-                output=test_output
+                output=test_output,
+                exit_code=test_output.get("exit_code")
             )
             detection = self.detector.detect(res)
             

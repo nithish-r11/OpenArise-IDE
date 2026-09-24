@@ -2,17 +2,21 @@ import uuid
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
+from enum import Enum
+from app.tools.permissions import RiskLevel
 
 class AgentRequest(BaseModel):
     """Initial request to the agent."""
     prompt: str = Field(..., description="The user's instruction or request")
     context_data: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional context")
+    request_id: str = Field(default_factory=lambda: str(uuid.uuid4()), min_length=1)
 
 class ToolCall(BaseModel):
     """A request for the agent to call a tool."""
     tool_name: str = Field(..., description="The name of the tool to call")
     tool_call_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique ID for this tool call")
     arguments: Dict[str, Any] = Field(default_factory=dict, description="Arguments to pass to the tool")
+    requirement_ids: List[str] = Field(default_factory=list, description="Requirements addressed by this call")
 
 class ToolResult(BaseModel):
     """The result of calling a tool."""
@@ -32,19 +36,50 @@ class AgentAction(BaseModel):
     tool_calls: List[ToolCall] = Field(default_factory=list)
     message: Optional[str] = None
 
+class ActionState(str, Enum):
+    RUNNING = "running"
+    PERMISSION_REQUIRED = "permission_required"
+    APPROVED = "approved"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    DENIED = "denied"
+    CANCELLED = "cancelled"
+
+
+class PendingAction(BaseModel):
+    request_id: str
+    tool_call_id: str
+    tool_call: ToolCall
+    risk_level: RiskLevel
+    action_index: int
+    approved: bool = False
+
+
+class AgentEvent(BaseModel):
+    request_id: str
+    sequence: int
+    event_type: str
+    current_state: str
+    tool_call_id: Optional[str] = None
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 class AgentResponse(BaseModel):
     """The final response from the agent."""
     status: str = Field(..., description="The final status of the request (e.g., success, failure)")
     message: str = Field(..., description="The final message to the user")
     data: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Additional structured data")
+    request_id: Optional[str] = None
+    current_state: str = "IDLE"
+    action_state: ActionState = ActionState.COMPLETED
+    pending_action: Optional[PendingAction] = None
 
 class ExecutionState(BaseModel):
     """The current execution state of the agent."""
     current_state: str
     history: List[AgentAction] = Field(default_factory=list)
     variables: Dict[str, Any] = Field(default_factory=dict)
-
-from enum import Enum
+    events: List[AgentEvent] = Field(default_factory=list)
 
 class FailureCategory(str, Enum):
     SYNTAX_ERROR = "SYNTAX_ERROR"
@@ -113,8 +148,6 @@ class RecoveryPolicy(BaseModel):
     max_repeated_identical: int = 2
     max_actions_per_cycle: int = 5
     timeout_seconds: int = 60
-
-from app.tools.permissions import RiskLevel
 
 class RecoveryPlan(BaseModel):
     """A proposed recovery plan."""

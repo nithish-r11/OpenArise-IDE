@@ -81,3 +81,7 @@ class RequirementManager:
         if feature_id not in req.implementation_references:
             req.implementation_references.append(feature_id)
         return True
+
+    def store_requirement(self, requirement: Requirement):
+        """Adopt an existing tracked requirement without generating a second identity."""
+        self._requirements[requirement.requirement_id] = requirement.model_copy(deep=True)

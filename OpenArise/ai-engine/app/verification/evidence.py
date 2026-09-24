@@ -25,3 +25,6 @@ class EvidenceLedger:
         
     def clear(self):
         self._records.clear()
+
+    def list_evidence(self) -> List[EvidenceRecord]:
+        return list(self._records.values())

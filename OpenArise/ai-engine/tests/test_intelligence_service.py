@@ -20,11 +20,7 @@ def test_intelligence_service_facade():
     
     # Drift facade
     baseline = RequirementBaseline(requirement_id="req_1")
-    class DummyGraphManager:
-        class DummyGraph:
-            nodes = []
-        graph = DummyGraph()
-        
-    finding = service.detect_drift(baseline, state, blueprint, DummyGraphManager())
+    from app.traceability.graph import TraceabilityGraphManager
+    finding = service.detect_drift(baseline, state, blueprint, TraceabilityGraphManager("p1"))
     # req_1 is not in blueprint, so structural drift
     assert finding.state.value == "CONFIRMED_STRUCTURAL_DRIFT"

@@ -87,7 +87,7 @@ class ProjectScanner:
                 except Exception:
                     continue
                     
-                is_sensitive = self._is_sensitive(filename)
+                is_sensitive = self._is_sensitive(rel_path)
                 content_hash = None
                 if not is_sensitive:
                     content_hash = self._get_content_hash(file_path)

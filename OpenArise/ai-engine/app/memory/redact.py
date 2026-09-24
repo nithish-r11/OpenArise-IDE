@@ -29,14 +29,15 @@ class SecretRedactor:
         return redacted
         
     def redact_dict(self, data: dict) -> dict:
-        redacted_data = {}
-        for k, v in data.items():
-            if isinstance(v, str):
-                redacted_data[k] = self.redact(v)
-            elif isinstance(v, dict):
-                redacted_data[k] = self.redact_dict(v)
-            elif isinstance(v, list):
-                redacted_data[k] = [self.redact(str(item)) if isinstance(item, str) else item for item in v]
-            else:
-                redacted_data[k] = v
-        return redacted_data
+        def clean(value):
+            if isinstance(value, dict):
+                return self.redact_dict(value)
+            if isinstance(value, list):
+                return [clean(item) for item in value]
+            return self.redact(value) if isinstance(value, str) else value
+
+        sensitive_keys = {"api_key", "apikey", "token", "password", "secret", "authorization", "access_token"}
+        return {
+            key: "***REDACTED***" if str(key).lower().replace("-", "_") in sensitive_keys else clean(value)
+            for key, value in data.items()
+        }

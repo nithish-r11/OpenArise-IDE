@@ -1,4 +1,21 @@
 from typing import Dict, Any
+from app.memory.redact import SecretRedactor
+
+
+def bounded_intelligence_summary(value: Any) -> Dict[str, Any]:
+    """Allow only bounded factual fields, even for direct AgentRequest callers."""
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    name = value.get("project_name")
+    if isinstance(name, str):
+        result["project_name"] = SecretRedactor().redact(name[:120])
+    for key in ("total_files", "requirements_count", "traceability_nodes",
+                "health_issues", "missing_dependencies"):
+        number = value.get(key)
+        if type(number) is int and 0 <= number <= 1_000_000_000:
+            result[key] = number
+    return result
 
 class ProjectIntelligenceContextAdapter:
     """Adapts the rich intelligence snapshot into a bounded context for the AI Agent."""
@@ -27,7 +44,7 @@ class ProjectIntelligenceContextAdapter:
             }
             
             return {
-                "intelligence_summary": bounded
+                "intelligence_summary": bounded_intelligence_summary(bounded)
             }
         except Exception:
             # Fallback if something fails

@@ -4,15 +4,26 @@ from app.tools.base import BaseTool
 from app.tools.permissions import RiskLevel
 
 def _is_safe_path(project_root: str, relative_path: str) -> bool:
-    abs_path = os.path.abspath(os.path.join(project_root, relative_path))
-    if not abs_path.startswith(os.path.abspath(project_root)):
+    """Contain resolved paths and exclude secret/runtime files; not an OS sandbox."""
+    from pathlib import Path
+    try:
+        requested = Path(relative_path)
+        if requested.is_absolute() or requested.drive:
+            return False
+        root = Path(project_root).resolve()
+        target = (root / requested).resolve()
+        if target == root or not target.is_relative_to(root):
+            return False
+        parts = [part.lower() for part in requested.parts + target.relative_to(root).parts]
+        sensitive = (".env", "credential", "secret", "token", "id_rsa", "id_ed25519")
+        return not any(
+            part in (".git", ".openarise") or part.endswith((".pem", ".key"))
+            or any(marker in part for marker in sensitive)
+            for part in parts
+        )
+    except (OSError, ValueError, TypeError):
         return False
-    
-    base_name = os.path.basename(abs_path)
-    sensitive_files = {".env", "credentials", "id_rsa", "id_ed25519", "secrets.json"}
-    if base_name in sensitive_files:
-        return False
-    return True
+
 
 class ReadFileTool(BaseTool):
     name: str = "read_file"

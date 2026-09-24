@@ -4,6 +4,7 @@ import logging
 from typing import List
 from app.models.schemas import Requirement, VerificationStatus
 from app.verification.evidence import EvidenceLedger
+from app.tools.fs import _is_safe_path
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,10 @@ class RequirementDriftDetector:
                 for ev in evidence_list:
                     if ev.file_hash and ev.source:
                         abs_path = os.path.join(self.project_root, ev.source)
-                        current_hash = self._hash_file(abs_path)
+                        current_hash = self._hash_file(abs_path) if _is_safe_path(self.project_root, ev.source) else ""
                         if current_hash != ev.file_hash:
                             logger.warning(f"Drift detected for req {req.requirement_id}: file {ev.source} changed.")
+                            ev.result["stale"] = True
                             req.status = VerificationStatus.INCONCLUSIVE
                             drifted = True
                             break
