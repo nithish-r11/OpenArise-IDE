@@ -1,0 +1,164 @@
+# AI workspace architecture (through Phase 7)
+
+## Existing backend, desktop transport
+
+The integration path is:
+
+```text
+AIPanel / useAI
+  → BackendClient
+  → window.openarise.request (preload)
+  → trusted main-window/frame/page and current-project checks
+  → DesktopBackendService / WorkspaceBackendAdapter
+  → fixed Python interpreter, desktop/python/agent_host.py, bounded JSONL
+  → existing BackendService.dispatch
+  → existing ProjectWorkspaceService
+  → existing AgentOrchestrator, PermissionManager and CompletionGate
+```
+
+No second agent, model client, HTTP API, permission system, test engine or recovery
+engine was created. Production configures the existing OllamaProvider using the
+existing backend settings (OLLAMA_HOST/OLLAMA_MODEL, default localhost:11434/llama3).
+The host starts with the fixed backend directory as cwd so the backend's existing
+.env configuration lookup is preserved. Credentials/configuration are never sent
+to React. No model pulls, package installs, provider configuration UI or Luminous
+inference are included.
+
+The interpreter is the existing ai-engine/.venv Python. The host explicitly
+registers the existing read_file, write_file, execute_python and execute_tests
+tools with production PermissionManager(test_mode=False). Person 1 controls tool
+execution and verification. AI tool execution uses that backend interpreter;
+the separately displayed Phase 3 project interpreter applies to manual Run/Test.
+Opening the panel does not start inference. Context refresh or submission lazily
+starts the workspace host; an available host does not imply that Ollama/model
+inference is available.
+
+## Requests, context and lifecycle
+
+AIRequest contains requestId, prompt, optional context and optional projectRef.
+The UI sends the prompt and selected project reference, not file contents.
+Electron validates the reference against the native-picker ProjectService root.
+The root/executable cannot be overridden by renderer data. AI history has at most
+20 request entries in React memory, scoped to the selected project; it is lost on
+reload/exit and never written to localStorage or a database. Draft text is retained
+on unavailable/failed submission and original prompts remain in history. Reuse
+prompt restores a history item into the composer.
+
+Submission locks immediately, before awaiting transport. Duplicate Enter/click
+submissions are rejected while active, and a retained permission action prevents
+starting another request. Dirty editor state blocks submission and resume in the
+UI and main process; an AI write can still race later edits, so Phase 2 disk revision
+conflicts remain authoritative. Reopen clean tabs to inspect files changed by AI.
+Project replacement is blocked while AI work or a permission action is active.
+
+Before initial execution and explicit context refresh, the host calls the existing
+refresh_workspace method. ProjectWorkspaceService automatically incorporates the
+existing ProjectIntelligenceContextAdapter's bounded summary. The desktop context
+view uses that same adapter and shows only factual counts and environment
+observations. Unknown context is labelled unavailable/not loaded, not invented.
+
+The original envelope request ID is preserved as the agent ID. Approval, resume,
+denial, cancellation and retrieval each use a fresh command ID and target the
+original agent/tool IDs. BackendService retains its existing idempotency cache;
+the desktop does not replace it. Cross-crash exactly-once execution is not claimed.
+
+## Permissions
+
+A permission card begins with pending_action returned by the backend. Its final decision is retained in session history.
+It shows risk category, safe tool name, safe relative resource if available and
+request/tool IDs. Raw command arguments, file content and replacement arguments
+are never exposed or accepted.
+
+Allow sends approve_agent_action and, only after a confirmed approved response,
+sends a separate resume_agent_execution with the same retained IDs. Approved work
+can be resumed separately if needed. Deny and Cancel call the existing backend
+methods. No action is executed in React. No local grant table or automatic
+PermissionManager approvals were added. Partial work is not rolled back.
+
+A transport error retains the last known pending card and enables Refresh request
+result. Re-query the original request before retrying actions. If the host is lost,
+inspect disk for partial effects; restart the desktop before submitting new work.
+A pending-state transport loss conservatively prevents project switching rather
+than assuming the outstanding action was safely cancelled.
+
+## Results and recorded activity
+
+Outer response.success indicates handled dispatch only. Nested agent status
+distinguishes success, unverified, failure, permission_required, approved, denied
+and cancelled. The UI displays Verified by CompletionGate only when nested status
+is success, the action/lifecycle are completed and verification.overall_status is VERIFIED, with consistent coverage and no returned failure, active stale evidence or unresolved issue. It never
+converts unverified to success.
+
+While waiting, Submitting and Backend command active describe local transport
+state. No inferred Thinking/Planning/progress percentages are shown. Backend
+states and events appear only after the synchronous command returns. Event lists
+explicitly say recorded observations, not live streaming. No polling claims live
+access while BackendService holds its synchronous lock.
+
+Tool presentation includes allowlisted tool name, ID, executed/success state,
+exit code and timestamp. The projection excludes tool arguments/output, source
+content, arbitrary LLM action prose, evidence payloads, raw exceptions and stack
+traces. The final lifecycle message, numeric CompletionGate report, safe requirement results and bounded evidence summaries/flags are shown.
+This is a lifecycle/result UI, not a renderer for arbitrary model-generated code.
+
+Recovery states/events and report counts appear only when present. The current
+backend emits recovery_finished but does not include a separate recovery outcome
+or full diagnosis in AgentResponse. The UI therefore labels the attempt finished
+with outcome not supplied; it does not infer recovery success/failure or fabricate
+a diagnosis. Phase 7 cards explicitly show these gaps. The projection accepts a bounded optional RecoveryResult only if supplied in action data; the current API does not emit it. Completed/blocked recovery detail is validated with labelled deterministic UI fixtures.
+
+## Presentation safety and bounds
+
+The backend contract and Python models are unchanged. agent_projection.py is a
+desktop-only allowlisted presentation projection of method data inside the existing
+response envelope. Context uses intelligence_summary from the existing adapter.
+Safe pending cards omit tool_call.arguments; tool results omit output/error. The
+typed desktop view schema documents this subset rather than pretending to expose
+the full raw BackendService payload.
+
+IPC validates exact operation shapes, project references and IDs. Requests are
+limited to 65,536 JSON code units; the composer limits prompts to 12,000 characters.
+Stdio responses are capped at 512 Ki code units and validated against correlated
+command IDs, enum values, safe field sets, monotonically increasing event sequences
+and bounded arrays. At most the latest 200 recorded events and 100 tool results
+are presented. Phase 7 additionally bounds evidence to 40 records, requirements/results to 30, evidence reference lists to 20 and missing/remaining issue lists to 10. Partial collections are labelled. SecretRedactor is reused for bounded text/path fields; raw payloads
+are omitted entirely. Identifiers are bounded. Rendering uses React text nodes,
+without HTML/Markdown execution or interpreted shell output.
+
+Main labels injected test-adapter responses as test_fixture; the renderer cannot select that adapter. Phase 7 AI/activity views visibly distinguish fixture, backend and unreported sources. No fixture proves live Ollama behavior.
+
+The preload still exposes no Node, filesystem, child_process, raw invoke or generic
+shell. Electron sandbox, context isolation, web security, navigation restrictions
+and CSP are unchanged. The existing main-process ownership and before-quit path
+await work, BackendService shutdown acknowledgement and file-host cleanup.
+
+## Cancellation, shutdown and process limits
+
+Pending actions can be cancelled. A synchronous in-flight request cannot be
+reliably interrupted through this contract, so no active-request Cancel button
+claims otherwise. Shutdown waits for it and then sends the existing shutdown
+command, which cancels retained pending work and revokes approvals. There is no
+second shutdown protocol or rollback promise.
+
+The AI host reuses Phase 3 Windows Job Object ownership before initializing the
+backend; POSIX uses a process group. Invalid transport output/lost connections
+fail closed and remove the owned process tree where supported, but executed side
+effects may remain. This is not an OS filesystem/network sandbox. Project Python,
+backend tools and configured providers run with user privileges. Adversarial POSIX
+processes can detach. Forced process loss and main crashes have no cleanup or
+exactly-once guarantee.
+
+## Offline testing
+
+UI tests use typed recorded fixtures. Python integration tests instantiate the
+real BackendService/ProjectWorkspaceService/AgentOrchestrator with an offline
+LLMProvider, then exercise real permission gating, write execution, denial,
+cancellation and CompletionGate's unverified outcome in temporary projects.
+A process integration test starts the production stdio host and reads context/
+environment and shutdown without requesting inference.
+
+Electron smokes inject a BackendProcessAdapter through the Node entry-point
+composition function. This test seam is not exposed to React or controlled by a
+production environment variable/command-line mock flag. They enter a prompt and
+exercise the real secure IPC, permission card, approve/resume and unverified
+result. No real Ollama service is required for any automated test.

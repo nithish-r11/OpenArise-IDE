@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-electron/
+.packaging/
+release/
+coverage/
+*.tsbuildinfo
+*.log
+
+# Keep the source-derived Windows application icon reproducible.
+!build/
+build/*
+!build/icon.png

@@ -1,0 +1,370 @@
+{
+  "get_project_information": {
+    "project_id": "orbit",
+    "root_path": "C:/orbit-workspace",
+    "name": "orbit-workspace",
+    "created_at": "2026-09-28T08:00:00Z"
+  },
+  "get_project_state": {
+    "project_info": {
+      "project_id": "orbit",
+      "root_path": "C:/orbit-workspace",
+      "name": "orbit-workspace",
+      "created_at": "2026-09-28T08:00:00Z"
+    },
+    "scan_timestamp": "2026-09-28T08:00:00Z",
+    "git_available": true,
+    "counts": {
+      "files": 4,
+      "python_modules": 3,
+      "test_files": 1
+    },
+    "files": [
+      {
+        "relative_path": "app/main.py",
+        "file_type": "python",
+        "size": 500,
+        "is_test": false,
+        "is_source": true,
+        "is_config": false
+      }
+    ],
+    "frameworks": [
+      "FastAPI"
+    ],
+    "dependencies": [
+      {
+        "name": "pytest",
+        "version_specifier": null,
+        "source_file": "requirements.txt"
+      }
+    ],
+    "truncated": false
+  },
+  "get_requirements": {
+    "items": [
+      {
+        "requirement_id": "req-1",
+        "title": "Local greeting",
+        "description": "Show a greeting from the local workspace.",
+        "lifecycle_status": "completed",
+        "status": "NOT_VERIFIED",
+        "acceptance_criteria": [
+          "A greeting is returned"
+        ],
+        "implementation_references": [
+          "impl-1"
+        ],
+        "evidence_references": []
+      }
+    ],
+    "total": 1,
+    "truncated": false
+  },
+  "get_blueprint": {
+    "project_id": "orbit",
+    "project_name": "orbit-workspace",
+    "description": "Greeting workflow",
+    "generated_at": "2026-09-28T08:00:00Z",
+    "requirements": [
+      "req-1"
+    ],
+    "features": [
+      {
+        "feature_id": "feat-1",
+        "title": "Greeting feature",
+        "description": "Local greeting",
+        "status": "in_progress",
+        "requirement_ids": [
+          "req-1"
+        ]
+      }
+    ],
+    "tasks": [
+      {
+        "task_id": "task-1",
+        "feature_id": "feat-1",
+        "title": "Implement greeting",
+        "description": "Return the greeting",
+        "status": "pending",
+        "dependencies": []
+      }
+    ],
+    "truncated": false
+  },
+  "get_traceability_graph": {
+    "project_id": "orbit",
+    "requirements": [
+      "req-1"
+    ],
+    "features": [
+      "feat-1"
+    ],
+    "tasks": [
+      "task-1"
+    ],
+    "evidence": [
+      "evidence-1"
+    ],
+    "implementations": [
+      {
+        "implementation_id": "impl-1",
+        "file_path": "app/main.py",
+        "module_name": "app.main",
+        "symbol_name": "welcome",
+        "symbol_type": "function",
+        "feature_id": "feat-1",
+        "requirement_ids": [
+          "req-1"
+        ],
+        "evidence_ids": []
+      }
+    ],
+    "tests": [
+      {
+        "test_id": "test-1",
+        "file_path": "test_sample.py",
+        "test_name": "test_ready",
+        "requirement_ids": [],
+        "evidence_ids": [
+          "evidence-1"
+        ]
+      }
+    ],
+    "links": [
+      {
+        "link_id": "link-0",
+        "source_id": "req-1",
+        "target_id": "feat-1",
+        "link_type": "requirement_to_feature",
+        "evidence_backed": false,
+        "is_inferred": false,
+        "created_at": "2026-09-28T08:00:00Z"
+      },
+      {
+        "link_id": "link-1",
+        "source_id": "feat-1",
+        "target_id": "task-1",
+        "link_type": "feature_to_task",
+        "evidence_backed": false,
+        "is_inferred": false,
+        "created_at": "2026-09-28T08:00:00Z"
+      },
+      {
+        "link_id": "link-2",
+        "source_id": "task-1",
+        "target_id": "impl-1",
+        "link_type": "task_to_implementation",
+        "evidence_backed": false,
+        "is_inferred": false,
+        "created_at": "2026-09-28T08:00:00Z"
+      },
+      {
+        "link_id": "link-3",
+        "source_id": "impl-1",
+        "target_id": "test-1",
+        "link_type": "implementation_to_test",
+        "evidence_backed": false,
+        "is_inferred": true,
+        "created_at": "2026-09-28T08:00:00Z"
+      },
+      {
+        "link_id": "link-4",
+        "source_id": "test-1",
+        "target_id": "evidence-1",
+        "link_type": "test_to_evidence",
+        "evidence_backed": true,
+        "is_inferred": false,
+        "created_at": "2026-09-28T08:00:00Z"
+      }
+    ],
+    "validation": {
+      "valid": true,
+      "issues": []
+    },
+    "truncated": false
+  },
+  "get_environment_status": {
+    "python_available": true,
+    "python_executable": "C:/Python/python.exe",
+    "python_version": "3.13.5",
+    "virtualenv_present": false,
+    "virtualenv_path": null,
+    "virtualenv_usable": false,
+    "platform": "Windows",
+    "git_available": true,
+    "inspection_scope": "current_environment"
+  },
+  "get_health_report": {
+    "project_id": "orbit",
+    "generated_at": "2026-09-28T08:00:00Z",
+    "environment": {
+      "python_available": true,
+      "python_executable": "C:/Python/python.exe",
+      "python_version": "3.13.5",
+      "virtualenv_present": false,
+      "virtualenv_path": null,
+      "virtualenv_usable": false,
+      "platform": "Windows",
+      "git_available": true,
+      "inspection_scope": "current_environment"
+    },
+    "checks": [
+      {
+        "check_id": "pytest",
+        "name": "Pytest availability",
+        "status": "available",
+        "severity": "INFO",
+        "message": "pytest is available in the inspected environment",
+        "evidence": "pytest 9.0"
+      },
+      {
+        "check_id": "dep",
+        "name": "Optional package",
+        "status": "missing",
+        "severity": "WARNING",
+        "message": "Declared package not installed",
+        "evidence": null
+      }
+    ],
+    "dependency_status": [
+      {
+        "name": "pytest",
+        "version_specifier": null,
+        "declared": true,
+        "installed": true,
+        "installed_version": "9.0",
+        "status": "installed",
+        "source_file": "requirements.txt",
+        "action": "READY",
+        "message": null
+      }
+    ],
+    "truncated": false
+  },
+  "get_intelligence_snapshot": {
+    "project_id": "orbit",
+    "project_name": "orbit-workspace",
+    "scan_timestamp": "2026-09-28T08:00:00Z",
+    "project_state_summary": {
+      "total_files": 4,
+      "python_modules": 3,
+      "dependencies_declared": 1
+    },
+    "blueprint_summary": {
+      "requirements": 1,
+      "features": 1,
+      "tasks": 1
+    },
+    "traceability_summary": {
+      "nodes": 6,
+      "links": 5
+    },
+    "environment_summary": {
+      "python_available": true,
+      "virtualenv_present": false,
+      "git_available": true
+    },
+    "health_summary": {
+      "total_checks": 2,
+      "blocked": 0,
+      "errors": 0,
+      "warnings": 1,
+      "missing_dependencies": 0
+    },
+    "requirement_summary": {
+      "total": 1,
+      "by_verification_status": {
+        "NOT_VERIFIED": 1
+      }
+    },
+    "drift_summary": [],
+    "intelligence_summary": {
+      "project_name": "orbit-workspace",
+      "total_files": 4,
+      "requirements_count": 1,
+      "traceability_nodes": 6,
+      "health_issues": 1,
+      "missing_dependencies": 0
+    }
+  },
+  "refresh_workspace": {
+    "project_id": "orbit",
+    "project_name": "orbit-workspace",
+    "scan_timestamp": "2026-09-28T08:00:00Z",
+    "project_state_summary": {
+      "total_files": 4,
+      "python_modules": 3,
+      "dependencies_declared": 1
+    },
+    "blueprint_summary": {
+      "requirements": 1,
+      "features": 1,
+      "tasks": 1
+    },
+    "traceability_summary": {
+      "nodes": 6,
+      "links": 5
+    },
+    "environment_summary": {
+      "python_available": true,
+      "virtualenv_present": false,
+      "git_available": true
+    },
+    "health_summary": {
+      "total_checks": 2,
+      "blocked": 0,
+      "errors": 0,
+      "warnings": 1,
+      "missing_dependencies": 0
+    },
+    "requirement_summary": {
+      "total": 1,
+      "by_verification_status": {
+        "NOT_VERIFIED": 1
+      }
+    },
+    "drift_summary": [],
+    "intelligence_summary": {
+      "project_name": "orbit-workspace",
+      "total_files": 4,
+      "requirements_count": 1,
+      "traceability_nodes": 6,
+      "health_issues": 1,
+      "missing_dependencies": 0
+    }
+  },
+  "get_timeline": {
+    "items": [
+      {
+        "event_id": "event-1",
+        "timestamp": "2026-09-28T08:00:00Z",
+        "event_type": "PROJECT_SCANNED",
+        "title": "Workspace scanned",
+        "description": "Existing backend scan recorded.",
+        "related_requirement_ids": [
+          "req-1"
+        ],
+        "related_feature_ids": [],
+        "related_task_ids": []
+      }
+    ],
+    "total": 1,
+    "truncated": false
+  },
+  "create_requirement_baseline": {
+    "requirement_id": "req-1",
+    "captured": true
+  },
+  "get_drift_report": {
+    "requirement_id": "req-1",
+    "state": "POTENTIAL_DRIFT",
+    "reason": "Mapped file content changed since baseline.",
+    "related_implementations": [
+      "impl-1"
+    ],
+    "related_tasks": [
+      "task-1"
+    ]
+  }
+}
