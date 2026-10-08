@@ -1,4 +1,4 @@
-# AI workspace architecture (through Phase 7)
+# AI workspace architecture (October 6 Ollama and recovery acceptance)
 
 ## Existing backend, desktop transport
 
@@ -18,7 +18,7 @@ AIPanel / useAI
 
 No second agent, model client, HTTP API, permission system, test engine or recovery
 engine was created. Production configures the existing OllamaProvider using the
-existing backend settings (OLLAMA_HOST/OLLAMA_MODEL, default localhost:11434/llama3).
+existing backend settings (OLLAMA_HOST/OLLAMA_MODEL/OLLAMA_TIMEOUT_SECONDS), with DesktopSettings defaults 127.0.0.1:11434/qwen2.5-coder:7b/180 seconds. Environment and backend .env values override them; standalone Settings defaults remain compatible.
 The host starts with the fixed backend directory as cwd so the backend's existing
 .env configuration lookup is preserved. Credentials/configuration are never sent
 to React. No model pulls, package installs, provider configuration UI or Luminous
@@ -29,7 +29,7 @@ registers the existing read_file, write_file, execute_python and execute_tests
 tools with production PermissionManager(test_mode=False). Person 1 controls tool
 execution and verification. AI tool execution uses that backend interpreter;
 the separately displayed Phase 3 project interpreter applies to manual Run/Test.
-Opening the panel does not start inference. Context refresh or submission lazily
+Opening a project loads bounded context without starting inference. Context loading, refresh or submission lazily
 starts the workspace host; an available host does not imply that Ollama/model
 inference is available.
 
@@ -51,8 +51,7 @@ UI and main process; an AI write can still race later edits, so Phase 2 disk rev
 conflicts remain authoritative. Reopen clean tabs to inspect files changed by AI.
 Project replacement is blocked while AI work or a permission action is active.
 
-Before initial execution and explicit context refresh, the host calls the existing
-refresh_workspace method. ProjectWorkspaceService automatically incorporates the
+Before initial execution, the host calls the existing refresh_workspace method. Project opening performs the existing initial scan; context loading/refresh reads the snapshot and environment without initializing agent memory. ProjectWorkspaceService automatically incorporates the
 existing ProjectIntelligenceContextAdapter's bounded summary. The desktop context
 view uses that same adapter and shows only factual counts and environment
 observations. Unknown context is labelled unavailable/not loaded, not invented.
@@ -99,17 +98,35 @@ Tool presentation includes allowlisted tool name, ID, executed/success state,
 exit code and timestamp. The projection excludes tool arguments/output, source
 content, arbitrary LLM action prose, evidence payloads, raw exceptions and stack
 traces. The final lifecycle message, numeric CompletionGate report, safe requirement results and bounded evidence summaries/flags are shown.
-This is a lifecycle/result UI, not a renderer for arbitrary model-generated code.
+Text-only action messages are now displayed as redacted inert proposal text (maximum 8,000 characters); HTML/Markdown is never executed. Tool-action prose remains withheld.
 
-Recovery states/events and report counts appear only when present. The current
-backend emits recovery_finished but does not include a separate recovery outcome
-or full diagnosis in AgentResponse. The UI therefore labels the attempt finished
-with outcome not supplied; it does not infer recovery success/failure or fabricate
-a diagnosis. Phase 7 cards explicitly show these gaps. The projection accepts a bounded optional RecoveryResult only if supplied in action data; the current API does not emit it. Completed/blocked recovery detail is validated with labelled deterministic UI fixtures.
+Recovery states/events and counts appear only when returned. The existing backend
+now retains its real diagnosis and RecoveryResult in AgentResponse. Its retained
+recovery plan pauses for each exact write/execute approval and the mandatory pytest
+retest through the same approve/resume commands. No new IPC or recovery engine is
+introduced. Unknown tools and dependency installation remain blocked.
+
+The existing verifier preserves failed evidence. Only an actual RECOVERED result
+with linked, executed, passing retest proof for the same requirement can resolve
+that historical failure. Fresh source/test/config fingerprints must match the
+current project. Writes invalidate old test proof; a later passing retest may
+supersede stale passing proof, never silently erase a failure. Refreshing a retained
+request reevaluates changed execution proof with the same CompletionGate.
+
+Backend pytest uses a fresh bytecode namespace so rapid same-size rewrites cannot
+reuse a timestamp-valid old .pyc. Recovery memory stores the actual returned plan.
+Planning receives failure facts and diagnosis, excluding completed request steps
+that could accidentally repeat an intentional fault.
+
+Projection exposes only safe resolution IDs, failure/recovery summaries and
+recorded RETESTING state. Tool arguments, outputs and fingerprint payloads remain
+withheld. Recovery-finished activity can use the last returned outcome only for
+the matching latest cycle by its recorded timestamp; earlier attempts keep outcome
+not supplied. Activity remains synchronous returned history, never live streaming.
 
 ## Presentation safety and bounds
 
-The backend contract and Python models are unchanged. agent_projection.py is a
+The existing dispatch/lifecycle contract is retained. AgentMessageAction extends AgentAction with literal message type and zero permitted tool calls for answer-only requests. agent_projection.py is a
 desktop-only allowlisted presentation projection of method data inside the existing
 response envelope. Context uses intelligence_summary from the existing adapter.
 Safe pending cards omit tool_call.arguments; tool results omit output/error. The
@@ -161,4 +178,34 @@ Electron smokes inject a BackendProcessAdapter through the Node entry-point
 composition function. This test seam is not exposed to React or controlled by a
 production environment variable/command-line mock flag. They enter a prompt and
 exercise the real secure IPC, permission card, approve/resume and unverified
-result. No real Ollama service is required for any automated test.
+result. The default unit/host/smoke suites do not require real Ollama.
+The separate source live-acceptance helpers require the actual installed model,
+invoke real backend handlers and never inject AI results.
+
+## Answer-only request and provider failure handling
+
+The actual AppShell defaults to Answer only. context_data.response_mode=text_only
+travels through the same allowlisted request_agent_execution envelope, and the
+existing bounded adapter adds factual context. AgentOrchestrator still owns context,
+requirements, lifecycle and CompletionGate; it uses AgentMessageAction and the same
+OllamaProvider.generate_structured with a JSON schema in Ollama's format field.
+The message includes the requested answer rather than a next-tool plan. Invalid
+tool output fails before any execution. Agent actions mode retains the existing
+AgentAction/tool/permission path. No renderer HTTP call or second implementation
+exists. [Ollama generate API](https://docs.ollama.com/api/generate) documents schema
+format and non-streaming responses.
+
+The provider checks the exact configured model tag before generating. Wrong-size
+tags cannot count as installed. Stable provider reasons distinguish unavailable,
+model unavailable, timeout and generation failure; AgentOrchestrator maps these
+to existing failure categories, retains its safe failure contract and evaluates
+CompletionGate on failures. Projection retains safe outer command failure reasons.
+The host formatter keeps developer stack frames and exception types but omits
+exception values; main's stderr budget is 16 Ki characters with secret/URL/control
+redaction. Stdio stdout remains reserved for the existing correlated JSONL envelope.
+
+Generation defaults to a 180-second read timeout (30–900 configurable), startup/
+read IPC to 30 seconds and execution/resume transport to 15 minutes. No active
+inference cancellation or automatic retry is claimed. Live source UI evidence and
+the live recovery results and remaining UI/package checks are in
+OLLAMA_INTEGRATION_REPORT.md and ../FINAL_ACCEPTANCE_REPORT.md.

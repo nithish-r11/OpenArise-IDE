@@ -1,4 +1,4 @@
-export type ActivityState = 'idle' | 'submitting' | 'running' | 'waiting_for_permission' | 'failure' | 'recovering' | 'verifying' | 'completed' | 'unverified' | 'denied' | 'cancelled' | 'unavailable';
+export type ActivityState = 'idle' | 'submitting' | 'running' | 'waiting_for_permission' | 'failure' | 'recovering' | 'retesting' | 'verifying' | 'completed' | 'unverified' | 'denied' | 'cancelled' | 'unavailable';
 export type ActivityProvenance = 'ACTUAL_STATE' | 'RECORDED_ACTIVITY' | 'UNAVAILABLE_ACTIVITY';
 /** Presentation DTO. No transport, clock, inference, or synthetic event producer. */
 export interface ActivityEvent {

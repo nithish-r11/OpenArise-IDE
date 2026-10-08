@@ -4,9 +4,10 @@ import type { Project } from '../types/project';
 import type { AIHistoryItem, AIRequest, AIResult } from '../types/ai';
 import type { ClientResult, JsonObject } from '../types/backend';
 import { validAgentEnvelope } from '../../shared/agent-response';
-export function useAI(project?: Project) {
+export function useAI(project?: Project, answerOnly = false) {
   const client = useMemo(() => new BackendClient(window.openarise, project?.id), [project?.id]);
   const [prompt, setPrompt] = useState('');
+  const [mode, setMode] = useState<'text_only' | 'agent_actions'>(answerOnly ? 'text_only' : 'agent_actions');
   const [items, setItems] = useState<AIHistoryItem[]>([]);
   const [selected, setSelected] = useState('');
   const [busy, setBusy] = useState(false);
@@ -14,30 +15,46 @@ export function useAI(project?: Project) {
   const [context, setContext] = useState<JsonObject | null>(null);
   const [environment, setEnvironment] = useState<JsonObject | null>(null);
   const [error, setError] = useState('');
+  const [contextState, setContextState] = useState<'not_loaded' | 'loading' | 'ready' | 'unavailable'>('not_loaded');
+  const [contextError, setContextError] = useState('');
   const lock = useRef(false);
   const projectRef = useRef(project?.id); projectRef.current = project?.id;
   const history = useRef(items); history.current = items;
   const current = items.find(i => i.request.requestId === selected && i.request.projectRef?.id === project?.id);
   const pending = items.find(i => i.result?.pending_action);
   const patch = (requestId: string, update: Partial<AIHistoryItem>) => setItems(old => old.map(i => i.request.requestId === requestId ? { ...i, ...update } : i));
-  useEffect(() => { setContext(null); setEnvironment(null); setError(''); setSelected(''); }, [project?.id]);
+  useEffect(() => { setContext(null); setEnvironment(null); setContextState('not_loaded'); setContextError(''); setError(''); setSelected(''); }, [project?.id]);
+  const readError = (result: ClientResult, fallback: string) => result.kind === 'unavailable' ? result.message
+    : !result.response.success ? result.response.error.message + ' (' + result.response.error.code + ')' : fallback;
   const loadContext = async () => {
     if (!project || lock.current) return;
-    lock.current = true; setBusy(true); setError('');
+    lock.current = true; setBusy(true); setContextState('loading'); setContextError('');
     const id = project.id;
     try {
       const result = await client.getIntelligence();
       const env = await client.getEnvironment();
       if (projectRef.current !== id) return;
-      if (result.kind === 'backend' && result.response.success) setContext(result.response.data as JsonObject);
-      else setError('Project context is unavailable. It will be supplied by the backend when a request can run.');
-      if (env.kind === 'backend' && env.response.success) setEnvironment(env.response.data as JsonObject);
+      if (result.kind === 'backend' && result.response.success && validAgentEnvelope(result.response, result.response.request_id, 'get_intelligence_snapshot')) {
+        const data = result.response.data as JsonObject;
+        setContext(data);
+        const summary = data.intelligence_summary;
+        const available = !!summary && typeof summary === 'object' && !Array.isArray(summary) && Object.keys(summary).length > 0;
+        setContextState(available ? 'ready' : 'unavailable');
+        if (!available) setContextError('The backend did not return usable project context. Refresh or reopen the project before retrying.');
+      } else {
+        setContext(null); setContextState('unavailable');
+        setContextError(readError(result, 'Project context response was invalid. Refresh or reopen the project.'));
+      }
+      if (env.kind === 'backend' && env.response.success && validAgentEnvelope(env.response, env.response.request_id, 'get_environment_status')) setEnvironment(env.response.data as JsonObject);
+      else { setEnvironment(null); setContextError(message => message || readError(env, 'Python environment observations are unavailable.')); }
+    } catch {
+      if (projectRef.current === id) { setContextState('unavailable'); setContextError('Project context could not load. Reopen the project and check backend diagnostics.'); }
     } finally { lock.current = false; setBusy(false); }
   };
   const adopt = (requestId: string, result: ClientResult, method: string, commandId: string): AIResult | undefined => {
     if (result.kind !== 'backend' || !validAgentEnvelope(result.response, commandId, method) || !result.response.success) {
       const message = result.kind === 'unavailable' ? result.message : result.kind === 'backend' && !result.response.success
-        ? 'Backend rejected this command (' + result.response.error.code + ').' : 'Invalid backend response.';
+        ? result.response.error.message + ' (' + result.response.error.code + ')'  : 'Invalid backend response.';
       patch(requestId, { state: 'backend unavailable', error: message }); setError(message); return;
     }
     const agent = result.response.data as unknown as AIResult;
@@ -53,7 +70,7 @@ export function useAI(project?: Project) {
   const submit = async (blocked = false) => {
     if (!project || lock.current || pending || !prompt.trim() || blocked) return;
     lock.current = true; setBusy(true); setError('');
-    const request: AIRequest = { requestId: crypto.randomUUID(), prompt: prompt.trim(), projectRef: { id: project.id } };
+    const request: AIRequest = { requestId: crypto.randomUUID(), prompt: prompt.trim(), projectRef: { id: project.id }, ...(mode === 'text_only' ? { context: { response_mode: 'text_only' } } : {}) };
     setItems(old => [...old.slice(-19), { request, timestamp: new Date().toISOString(), state: 'submitting', events: [], source: 'unknown' }]);
     setSelected(request.requestId);
     try {
@@ -92,7 +109,7 @@ export function useAI(project?: Project) {
     } finally { lock.current = false; setBusy(false); setCommandInFlight(undefined); }
   };
   const visibleItems = items.filter(i => i.request.projectRef?.id === project?.id);
-  return { prompt, setPrompt, items: visibleItems, current, selected, setSelected, busy, commandInFlight,
+  return { prompt, setPrompt, mode, setMode, items: visibleItems, current, selected, setSelected, busy, commandInFlight,
     pending: pending?.request.projectRef?.id === project?.id ? pending : undefined,
-    context, environment, error, submit, command, loadContext };
+    context, contextState, contextError, environment, error, submit, command, loadContext };
 }

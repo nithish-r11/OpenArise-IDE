@@ -69,3 +69,12 @@
   .ai-history{padding:5px 10px}
   .ai-conversation{padding:10px}
 }
+
+.ai-model-response { padding: 12px; margin: 12px 0; border: 1px solid #394e75; border-radius: 7px; background: #0b1527; }
+.ai-model-response pre { margin: 10px 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.7 Consolas, monospace; color: #cbdcf4; }
+.ai-model-response small { display: block; color: #9bafcb; line-height: 1.6; }
+.ollama-status b { color: #adcde8; font-weight: 500; }
+.ai-composer .ai-composer-heading { align-items: center; justify-content: space-between; margin-top: 0; }
+.ai-mode { display: flex; gap: 3px; }
+.ai-mode button { min-height: 20px; padding: 1px 4px; font-size: 10px; }
+.ai-mode button[aria-pressed="true"] { color: #e5efff; border-color: #5989ed; background: #15284c; }

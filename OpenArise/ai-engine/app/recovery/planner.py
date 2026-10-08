@@ -1,3 +1,4 @@
+import json
 from typing import Optional, List
 from app.models.schemas import FailureEvent, DiagnosisResult, RecoveryPlan, ToolCall, FailureCategory
 from app.llm.base import LLMProvider
@@ -6,16 +7,21 @@ from app.memory.manager import MemoryManager
 
 PLANNER_SYSTEM_PROMPT = """You are an expert recovery planner.
 Create a safe, minimal RecoveryPlan for the provided software failure.
-Propose only concrete ToolCalls for existing tools.
+Propose only concrete ToolCalls for existing tools. Preserve the original test assertions; repair implementation, never weaken tests to claim success.
+The failure has already happened. Plan only the correction of the CURRENT failed state.
+The original user request is context for the desired final behavior; do not replay its completed baseline, intentional-fault, or failing execution steps.
+For an existing file, write_file must set overwrite=true. Use actual newlines in content.
+The recovery engine appends a mandatory pytest retest after your corrective actions; do not run tests before applying the correction.
 Do not use unrestricted shell commands.
 Prefer editing specific files or writing minimal scripts."""
 
 class RecoveryPlanner:
     """Plans recovery actions for failures."""
     
-    def __init__(self, llm_provider: LLMProvider, memory_manager: Optional[MemoryManager] = None):
+    def __init__(self, llm_provider: LLMProvider, memory_manager: Optional[MemoryManager] = None, tool_registry=None):
         self.llm = llm_provider
         self.memory = memory_manager
+        self.tool_registry = tool_registry
         
     def plan(self, failure: FailureEvent, diagnosis: DiagnosisResult) -> Optional[RecoveryPlan]:
         """Generates a recovery plan for a diagnosed failure."""
@@ -58,11 +64,16 @@ class RecoveryPlanner:
             pass
             
         # Fallback to LLM Planning
-        prompt = f"""Create a recovery plan for this failure.
+        # Completed request steps must not become active recovery instructions.
+        # Keep actual failure facts; the diagnosis describes the correction.
+        evidence = {key: value for key, value in failure.evidence.items() if key != "user_request"}
+        prompt = f"""Create a recovery plan for the CURRENT diagnosed failure.
+Desired outcome: correct the implementation so the unchanged original tests pass.
 Diagnosis: {diagnosis.model_dump_json()}
-Evidence: {failure.evidence}
+Evidence: {evidence}
 
 {historical_context}
+Available tools: {json.dumps(self.tool_registry.get_all_schemas()) if self.tool_registry else "Use existing registered tools only."}
 """
         try:
             plan = self.llm.generate_structured(

@@ -12,7 +12,7 @@ fs.writeFileSync(path.join(project, 'test_main.py'), 'def test_real_pytest():\n 
 fs.writeFileSync(path.join(project, 'broken.py'), 'def broken(:\n    pass\n');
 app.setPath('userData', path.join(base, 'profile'));
 dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [project] });
-const timer = setTimeout(() => { console.error('Real flow timed out'); app.exit(1); }, 120000);
+const timer = setTimeout(() => { console.error('Real flow timed out'); app.exit(1); }, 360000);
 const delay = ms => new Promise(r => setTimeout(r, ms));
 app.once('browser-window-created', (_event, window) => {
   const js = expression => window.webContents.executeJavaScript(expression);
@@ -110,7 +110,7 @@ app.once('browser-window-created', (_event, window) => {
       await window.webContents.insertText('Explain this Python project');
       await until('!document.querySelector(".ai-submit").disabled','AI submission ready');
       await js('document.querySelector(".ai-submit").click()');
-      await until('document.querySelector(".ai-result")?.textContent.includes("Backend state:") || document.querySelector(".ai-error")','real AI response',400);
+      await until('document.querySelector(".ai-result")?.textContent.includes("Backend state:") || document.querySelector(".ai-error")','real AI response',2100);
       const aiOutcome = await js('document.querySelector(".ai-result")?.innerText || document.querySelector(".ai-error")?.innerText');
       console.log('Real AI outcome:', aiOutcome);
       if (/Failed|Backend unavailable/.test(aiOutcome)) assert.doesNotMatch(aiOutcome, /Verified by CompletionGate/);

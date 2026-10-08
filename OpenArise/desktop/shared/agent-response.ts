@@ -2,10 +2,11 @@ import { intelligenceChecks } from './intelligence-response';
 import type { BackendResponse } from '../src/types/backend';
 const obj = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const keys = (v: Record<string, any>, names: string) => Object.keys(v).sort().join() === names.split(',').sort().join();
+const withoutResolution = (v: Record<string, any>) => Object.fromEntries(Object.entries(v).filter(([k]) => !['resolved_by', 'recovery_evidence'].includes(k)));
 const id = (v: unknown) => typeof v === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(v);
 const text = (v: unknown, max = 500) => typeof v === 'string' && v.length <= max && !/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(v);
 const number = (v: unknown) => Number.isSafeInteger(v) && Number(v) >= 0 && Number(v) <= 1e9;
-const states = ['IDLE', 'THINKING', 'PLANNING', 'EXECUTING', 'OBSERVING', 'FAILED', 'RECOVERING', 'VERIFYING', 'COMPLETED', 'PERMISSION_REQUIRED', 'APPROVED', 'DENIED', 'CANCELLED'];
+const states = ['IDLE', 'THINKING', 'PLANNING', 'EXECUTING', 'OBSERVING', 'FAILED', 'RECOVERING', 'RETESTING', 'VERIFYING', 'COMPLETED', 'PERMISSION_REQUIRED', 'APPROVED', 'DENIED', 'CANCELLED'];
 const statuses = ['success', 'unverified', 'failure', 'permission_required', 'approved', 'denied', 'cancelled'];
 const actions = ['running', 'permission_required', 'approved', 'completed', 'failed', 'denied', 'cancelled'];
 const toolNames = ['read_file', 'write_file', 'execute_python', 'execute_tests', 'unregistered_tool'];
@@ -44,15 +45,16 @@ export function validAgentEnvelope(value: unknown, commandId: string, method: st
   if (p !== null && (!obj(p) || !keys(p, 'request_id,tool_call_id,risk_level,approved,tool_name,resource') || p.request_id !== data.request_id || !id(p.tool_call_id)
     || !['READ', 'WRITE', 'EXECUTE'].includes(p.risk_level) || typeof p.approved !== 'boolean' || !toolNames.includes(p.tool_name)
     || !(p.resource === null || text(p.resource, 200) && !/[\\:]/.test(p.resource) && !p.resource.startsWith('/') && !p.resource.split('/').includes('..')))) return false;
-  if (!obj(data.data) || !keys(data.data, 'tool_results,verification,evidence,requirements,failure,recovery,truncated')
+  if (!obj(data.data) || !keys(Object.fromEntries(Object.entries(data.data).filter(([key]) => key !== 'model_response')), 'tool_results,verification,evidence,requirements,failure,recovery,truncated')
     || !Array.isArray(data.data.tool_results) || data.data.tool_results.length > 100 || typeof data.data.truncated !== 'boolean') return false;
-  for (const t of data.data.tool_results) if (!obj(t) || !keys(t, 'tool_name,tool_call_id,success,exit_code,timestamp,executed') ||
+  if ('model_response' in data.data && !text(data.data.model_response, 8000)) return false;
+  for (const t of data.data.tool_results) if (!obj(t) || (!keys(withoutResolution(t), 'tool_name,tool_call_id,success,exit_code,timestamp,executed') || 'recovery_evidence' in t || ('resolved_by' in t && !id(t.resolved_by))) ||
     !toolNames.includes(t.tool_name) || !(t.tool_call_id === null || id(t.tool_call_id)) || typeof t.success !== 'boolean' ||
     typeof t.executed !== 'boolean' || !(t.exit_code === null || Number.isSafeInteger(t.exit_code)) || !timestamp(t.timestamp)) return false;
   const rows = (v: unknown, max: number, check: (v: any) => boolean) => Array.isArray(v) && v.length <= max && v.every(check);
   const strings = (v: unknown, max = 10) => rows(v, max, s => text(s, 160));
   if (!rows(data.data.requirements, 30, r => obj(r) && keys(r, 'requirement_id,title') && id(r.requirement_id) && text(r.title, 160))) return false;
-  if (!rows(data.data.evidence, 40, e => obj(e) && keys(e, 'evidence_id,requirement_id,evidence_type,strength,summary,tool_call_id,success,exit_code,stale,superseded,timestamp')
+  if (!rows(data.data.evidence, 40, e => obj(e) && keys(withoutResolution(e), 'evidence_id,requirement_id,evidence_type,strength,summary,tool_call_id,success,exit_code,stale,superseded,timestamp') && (!('resolved_by' in e) || id(e.resolved_by)) && (!('recovery_evidence' in e) || id(e.recovery_evidence))
     && id(e.evidence_id) && id(e.requirement_id) && ['FILE_EXISTS', 'SYMBOL_EXISTS', 'CODE_INSPECTION', 'TEST_PASS', 'TEST_FAIL', 'COMMAND_RESULT', 'TOOL_RESULT', 'RECOVERY_RESULT', 'RUNTIME_RESULT'].includes(e.evidence_type)
     && ['DIRECT', 'SUPPORTING', 'WEAK', 'CONTRADICTORY'].includes(e.strength) && text(e.summary, 300)
     && (e.tool_call_id === null || id(e.tool_call_id)) && (e.success === null || typeof e.success === 'boolean')

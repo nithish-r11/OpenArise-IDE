@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from enum import Enum
@@ -35,6 +35,13 @@ class AgentAction(BaseModel):
     action_type: str = Field(..., description="The type of action (e.g., tool_call, message)")
     tool_calls: List[ToolCall] = Field(default_factory=list)
     message: Optional[str] = None
+
+class AgentMessageAction(AgentAction):
+    """Answer-only contract: model output cannot contain any executable tool."""
+    action_type: Literal["message"] = "message"
+    tool_calls: List[Any] = Field(default_factory=list, max_length=0)
+    message: str = Field(..., min_length=1)
+
 
 class ActionState(str, Enum):
     RUNNING = "running"

@@ -8,12 +8,14 @@ import { validAgentEnvelope } from '../shared/agent-response';
 import { backendPython, backendRoot, desktopPython } from './runtime-paths';
 const supported = new Set(['get_project_information', 'get_project_state', 'get_requirements', 'get_blueprint', 'get_traceability_graph', 'get_health_report', 'get_timeline', 'get_drift_report', 'refresh_workspace', 'create_requirement_baseline', 'get_intelligence_snapshot', 'get_environment_status', 'request_agent_execution',
   'get_agent_execution', 'approve_agent_action', 'resume_agent_execution', 'deny_agent_action', 'cancel_agent_execution']);
-const unavailable = (id: string, message: string): ClientResult => ({ kind: 'unavailable', request_id: id, code: 'transport_error', message });
+const unavailable = (id: string, message: string, code: 'transport_error' | 'backend_startup_failed' | 'backend_timeout' = 'transport_error'): ClientResult => ({ kind: 'unavailable', request_id: id, code, message });
 export class AgentProcess {
   private child: ChildProcessWithoutNullStreams;
   private stopped = false;
   private buffer = '';
-  private pending?: { request: BackendRequest | ShutdownRequest; resolve: (r: ClientResult) => void };
+  private pending?: { request: BackendRequest | ShutdownRequest; resolve: (r: ClientResult) => void; timer: ReturnType<typeof setTimeout> };
+  private readyPassed = false;
+  private diagnosticBudget = 16384;
   private readyResolve!: (v: boolean) => void;
   get alive() { return !this.stopped; }
   readonly ready = new Promise<boolean>(r => { this.readyResolve = r; });
@@ -22,18 +24,29 @@ export class AgentProcess {
     this.child = spawn(backendPython(), ['-I', '-B', '-u', desktopPython('agent_host.py'), root], {
       cwd: backendRoot(), shell: false, windowsHide: true, stdio: 'pipe', detached: process.platform !== 'win32',
     });
-    const timer = setTimeout(() => this.fail(), 15000);
+    const timer = setTimeout(() => this.fail('Backend startup timed out after 30 seconds. Check the Python runtime and project access.', 'backend_startup_failed'), 30000);
     void this.ready.then(() => clearTimeout(timer));
     this.child.stdout.setEncoding('utf8');
     this.child.stdout.on('data', (chunk: string) => this.receive(chunk));
-    this.child.stderr.on('data', () => {}); // Never forward Python logs or tracebacks.
+    this.child.stderr.on('data', (chunk: Buffer) => {
+      // Bounded developer-only diagnostics; never sent across IPC.
+      const safe = chunk.toString('utf8').replace(/https?:\/\/\S+/g, '[endpoint withheld]')
+        .replace(/\b(api[_-]?key|token|password|secret|authorization)\b["']?\s*[:=]\s*["']?[^\s"',}]+/gi, '$1=[redacted]')
+        .replace(/\b(?:sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{36})\b/g, '[redacted]')
+        .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+      if (this.diagnosticBudget > 0) console.error('[OpenArise backend]', safe.slice(0, this.diagnosticBudget));
+      this.diagnosticBudget = Math.max(0, this.diagnosticBudget - safe.length);
+    });
     this.child.stdin.on('error', () => this.fail());
     this.child.on('error', () => this.fail());
     this.done = new Promise(resolve => this.child.once('close', () => { this.fail(); resolve(); }));
   }
-  private fail() {
+  private fail(message = 'Agent connection was lost. Side effects may have occurred; inspect the project before retrying.', code: 'transport_error' | 'backend_startup_failed' | 'backend_timeout' = 'transport_error') {
     this.stopped = true; this.readyResolve(false);
-    this.pending?.resolve(unavailable(this.pending.request.request_id, 'Agent connection was lost. Side effects may have occurred; inspect the project before retrying.'));
+    if (this.pending) {
+      clearTimeout(this.pending.timer);
+      this.pending.resolve(unavailable(this.pending.request.request_id, message, code));
+    }
     this.pending = undefined;
     try {
       if (process.platform !== 'win32' && this.child.pid) process.kill(-this.child.pid, 'SIGKILL');
@@ -48,18 +61,21 @@ export class AgentProcess {
       const line = this.buffer.slice(0, end); this.buffer = this.buffer.slice(end + 1);
       try {
         const value = JSON.parse(line);
-        if (value.ready === true && Object.keys(value).length === 1 && !this.pending) { this.readyResolve(true); continue; }
+        if (value.ready === true && Object.keys(value).length === 1 && !this.pending) { this.readyPassed = true; this.readyResolve(true); continue; }
         const pending = this.pending;
         if (!pending || !validAgentEnvelope(value, pending.request.request_id, pending.request.method)) throw new Error();
         this.pending = undefined;
+        clearTimeout(pending.timer);
         pending.resolve({ kind: 'backend', response: value });
       } catch { this.fail(); return; }
     }
   }
   async request(request: BackendRequest | ShutdownRequest): Promise<ClientResult> {
-    if (this.stopped || this.pending || !await this.ready) return unavailable(request.request_id, 'Agent host is unavailable or busy.');
+    if (this.stopped || this.pending || !await this.ready) return unavailable(request.request_id, this.readyPassed ? 'Agent host is unavailable or busy.' : 'Backend startup failed. Check the Python runtime, project access and backend diagnostics.', this.readyPassed ? 'transport_error' : 'backend_startup_failed');
     return new Promise(resolve => {
-      this.pending = { request, resolve };
+      const budget = ['request_agent_execution', 'resume_agent_execution'].includes(request.method) ? 900000 : 30000;
+      const timer = setTimeout(() => this.fail('Backend request timed out. Work may have had side effects; inspect the project before retrying.', 'backend_timeout'), budget);
+      this.pending = { request, resolve, timer };
       this.child.stdin.write(JSON.stringify(request) + '\n');
     });
   }
@@ -99,7 +115,7 @@ export class WorkspaceBackendAdapter implements BackendProcessAdapter {
     if (this.active) return unavailable(request.request_id, 'The synchronous backend is busy. Wait for the recorded result.');
     // Reserve before connect to reject duplicate submissions during initialization.
     const work = async () => {
-      if ((await this.connect()).status !== 'connected' || !this.host) return unavailable(request.request_id, 'Agent host unavailable. Your prompt is retained.');
+      if ((await this.connect()).status !== 'connected' || !this.host) return unavailable(request.request_id, 'Backend startup failed. Check the Python runtime, project access and backend diagnostics. Your prompt is retained.', 'backend_startup_failed');
       const result = await this.host.request(request);
       if (result.kind === 'backend' && result.response.success && result.response.data && typeof result.response.data === 'object' && !Array.isArray(result.response.data)) {
         const data = result.response.data;

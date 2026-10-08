@@ -34,7 +34,7 @@ def failure_data(value):
         return None
 
 def recovery_data(value):
-    # The current action contract does not emit this optional RecoveryResult.
+    # Present the actual optional RecoveryResult returned by the engine.
     # Never read agent internals/memory or infer an outcome from recovery_finished.
     if not isinstance(value, dict):
         return None
@@ -50,7 +50,7 @@ def project_response(response, method, workspace):
     result.update(data=None, error=None, events=[])
     if not response["success"]:
         result["error"] = {"success": False, "code": response["error"]["code"],
-                           "message": "Backend could not complete this command.", "details": {}}
+                           "message": clean(response["error"].get("message") or "Backend could not complete this command.", 500), "details": {}}
         return result
     data = response["data"]
     if method == "shutdown":
@@ -77,6 +77,10 @@ def project_response(response, method, workspace):
                   "exit_code": t.get("exit_code"), "timestamp": t.get("timestamp"),
                   "executed": t.get("metadata", {}).get("executed") is True}
                  for t in details.get("tool_results", [])[-100:]]
+        for projected, original in zip(tools, details.get("tool_results", [])[-100:]):
+            resolution = identifier(original.get("metadata", {}).get("resolved_by"))
+            if resolution:
+                projected["resolved_by"] = resolution
         raw_evidence = details.get("evidence", [])
         evidence = []
         for e in raw_evidence[:40]:
@@ -88,6 +92,9 @@ def project_response(response, method, workspace):
                              "exit_code": facts.get("exit_code") if type(facts.get("exit_code")) is int else None,
                              "stale": facts.get("stale") is True, "superseded": facts.get("superseded") is True,
                              "timestamp": e["timestamp"]})
+            for field in ("resolved_by", "recovery_evidence"):
+                if identifier(facts.get(field)):
+                    evidence[-1][field] = facts[field]
         raw_requirements = details.get("requirements", [])
         requirements = [{"requirement_id": identifier(r["requirement_id"]), "title": clean(r["title"], 160)}
                         for r in raw_requirements[:30]]
@@ -105,6 +112,8 @@ def project_response(response, method, workspace):
                             "remaining_issues": texts(remaining),
                             "truncated": len(rows) > 30 or len(remaining) > 10 or any(
                                 len(r["evidence_used"]) > 20 or len(r["missing_evidence"]) > 10 or len(r["contradictions"]) > 20 for r in rows)}
+        # Only the answer of a text-only action is presented. Tool arguments/prose stay withheld.
+        model_response = details.get("agent_message") if details.get("action_type") == "message" and not details.get("tool_calls") else None
         message = clean(data.get("message", ""), 500)
         result["data"] = {"request_id": data["request_id"], "status": data["status"],
                           "current_state": data["current_state"], "action_state": data["action_state"],
@@ -113,4 +122,7 @@ def project_response(response, method, workspace):
                                    "requirements": requirements, "failure": failure_data(details.get("error")),
                                    "recovery": recovery_data(details.get("recovery")),
                                    "truncated": len(raw_evidence) > 40 or len(raw_requirements) > 30 or len(details.get("tool_results", [])) > 100}}
+        if isinstance(model_response, str) and model_response.strip():
+            result["data"]["data"]["model_response"] = clean(model_response, 8000)
+            result["data"]["data"]["truncated"] |= len(model_response) > 8000
     return result

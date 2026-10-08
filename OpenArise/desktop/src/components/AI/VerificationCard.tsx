@@ -5,12 +5,13 @@ export function VerificationCard({ item }: { item: AIHistoryItem }) {
   const state = item.error ? 'unavailable' : v ? v.overall_status === 'VERIFIED' && completion.state !== 'verified' ? completion.state : verificationState(v.overall_status)
     : item.state === 'submitting' || result?.pending_action ? 'pending' : 'unavailable';
   const tests = result?.data.tool_results.filter(t => t.tool_name === 'execute_tests') ?? [];
-  return <section className="ai-verification outcome-card" aria-label="Verification and evidence" data-state={state}>
-    <header><span className="eyebrow">VERIFICATION</span><span className="outcome-badge">{state}</span></header>
+  return <section className="ai-verification outcome-card" aria-label="Verification and evidence" data-state={state} data-verification-status={item.error ? undefined : v?.overall_status}>
+    <header><span className="eyebrow">VERIFICATION</span><span className="outcome-badge">{item.error ? 'UNAVAILABLE' : v?.overall_status ?? state}</span></header>
     <div className={'ai-completion completion-' + completion.state} aria-label="Final completion state" data-state={completion.state} role="status" aria-live="polite">
       <span className="eyebrow">FINAL RESULT</span><strong>{completion.final}</strong><p>{completion.reason}</p>
     </div>
     {item.error && v && <p>Earlier verification details are retained below. The current result is unavailable.</p>}
+    {result && <dl className="outcome-facts" aria-label="Returned backend states"><div><dt>{item.error ? 'Earlier backend state' : 'Backend state'}</dt><dd>{result.current_state}</dd></div><div><dt>{item.error ? 'Earlier action state' : 'Action state'}</dt><dd>{result.action_state}</dd></div></dl>}
     <p>CompletionGate result: <b>{v?.overall_status ?? 'Not returned'}</b></p>
     {!v ? <p>{state === 'pending' ? 'Verification is pending. No evidence-backed completion has been returned.' : 'Verification and coverage details are unavailable.'}</p> : <>
       <div className="verification-metrics"><div><b>{v.report.verified} / {v.report.total_requirements}</b><span>requirements verified</span></div><div><b>{v.report.evidence_count}</b><span>evidence records</span></div><div><b>{v.report.tests_executed}</b><span>test executions</span></div></div>

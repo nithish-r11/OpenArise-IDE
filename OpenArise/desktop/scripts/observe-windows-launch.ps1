@@ -21,7 +21,14 @@ public static class OpenAriseWindowObservation {
 }
 "@
 $phase8DpiContext=[OpenAriseWindowObservation]::SetThreadDpiAwarenessContext([IntPtr](-4))
-$phase8Processes=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -eq $phase8Exe})
+$phase8Processes=@(Get-CimInstance Win32_Process | Where-Object {
+  if ($_.ExecutablePath) { $_.ExecutablePath -eq $phase8Exe }
+  elseif ($_.Name -eq [IO.Path]::GetFileName($phase8Exe)) {
+    # WMI can omit the portable image path. Match the actual native process
+    # image via Get-Process instead; keep the same exact-path/count assertions.
+    (Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue).Path -eq $phase8Exe
+  }
+})
 $phase8Main=@($phase8Processes | Where-Object {$_.CommandLine -notmatch '--type='})
 if($phase8Main.Count -ne 1){throw ('Expected exactly one main process; got '+$phase8Main.Count)}
 $phase8Visible=@()

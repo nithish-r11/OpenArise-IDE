@@ -3,7 +3,7 @@
 Electron, React, TypeScript, Vite and Monaco, with Project Explorer, editing,
 controlled Python execution, pytest, a session-based terminal, the AI workspace
 and Project Intelligence.
-All desktop work stays here. The backend and its contracts are unchanged.
+The desktop uses the existing backend contracts. October 6 adds configurable Ollama defaults, answer-only requests, retained permission-gated recovery and fresh execution evidence. The existing agent, permission manager, recovery engine and CompletionGate remain authoritative.
 
 ## Run
 
@@ -33,15 +33,19 @@ launching. The build copies the backend source and an isolated Python 3.13
 runtime into Electron resources; it does not rely on the source checkout after
 packaging. The existing OpenArise orbit image supplies the Windows icon.
 
-`npm run package:win` targets an NSIS installer. Phase 8 produced a complete
-Setup EXE, but Windows Application Control blocked its normal execution before
-installation. The portable EXE was built and its contents inspected, but the
-same policy blocked its normal launch. MSI failed required ICE validation with
-LGHT1105. No validation or policy was bypassed in Phase 8. Only the ZIP has a
-validated normal launch on this host. Blocked portable/Setup candidates are
-retained under ignored `.packaging/phase8-blocked-artifacts/`, outside release
-downloads. Publisher signing and install/launch/uninstall on a clean Windows
-machine remain release acceptance items.
+`npm run package:win` targets an NSIS installer. The failure-state fix was followed
+by fresh ZIP, portable and NSIS builds after source tests/build/smokes. All current
+payloads match the final source and pass bundled Python/pytest checks. This latest
+ZIP's normal executable launch is BLOCKED by Application Control Enterprise
+signing policy. The latest portable wrapper's normal one-window launch and NSIS
+install/normal launch/uninstall are VERIFIED on this host. These are separate
+actual outcomes; earlier package launch results are not reused. The current MSI
+required ICE validation is BLOCKED with WiX LGHT1105: "Validation could not run
+due to system policy." No validated MSI is offered; no policy/validation bypass.
+Current hashes, evidence scopes and remaining acceptance items are in
+[RELEASE_VALIDATION.md](RELEASE_VALIDATION.md). Publisher signing and clean
+Windows acceptance remain NOT VERIFIED. Old candidates remain in ignored
+`.packaging/phase8-blocked-artifacts/`.
 
 AI execution uses the existing backend Ollama provider and configured model.
 Ollama and its model are separate prerequisites; neither is bundled or silently
@@ -71,7 +75,7 @@ SHA-256 revisions are checked against the retained open revision and current dis
 bytes. Conflicts retain the editor buffer. Edits made during a save remain dirty.
 Closing dirty tabs or the window requires an explicit discard choice; project
 switching is blocked while buffers are dirty. There is no autosave, Save As,
-force overwrite, recovery or durable buffer storage.
+force overwrite, unsaved-buffer recovery or durable buffer storage.
 
 ## Python environment
 
@@ -217,7 +221,8 @@ pytest, real filesystem revisions, and a real AI request. It supplies only the
 native picker result for unattended testing. Its temporary project and
 screenshots stay in ignored `.packaging/`. Phase 8 separately observed and
 inspected actual native visible windows from normal source and ZIP launches.
-A full human native-picker/project workflow remains unverified.
+The user separately confirmed actual packaged project open/edit/save/Python/pytest
+all worked. That human report is recorded separately from unattended evidence.
 Screenshots and smoke profiles live in OS temp or ignored packaging directories.
 
 Vite retains the non-failing size warning for the local lazy Monaco bundle.
@@ -248,7 +253,7 @@ cannot be guaranteed interruptible, and activity is not live streaming.
 
 Outer dispatch success is never treated as verification. Verified is shown only
 when the returned agent/CompletionGate states support it. Raw tool arguments,
-code/output, model prose and stack traces are withheld. Secrets/configuration are
+code/output, tool-action prose and stack traces are withheld. Bounded, redacted text-only model answers are displayed as inert proposal text. Secrets/configuration are
 not exposed. Context counts and recovery states are shown only when reported.
 
 See [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md) for the integration path, request
@@ -428,11 +433,19 @@ history. No local permission policy or recovery execution was added.
 
 Failure/recovery cards display returned category, severity, diagnosis, attempt
 state and retry/retest details when supplied. Missing details say unavailable or
-not reported. The current backend action response supplies recovery counts and
-recorded lifecycle events, but does not emit a detailed RecoveryResult or
-severity. A recorded recovery attempt therefore never implies recovery success.
-The UI can present an explicitly returned RecoveryResult; that completed/blocked
-presentation is exercised only with deterministic fixtures in this phase.
+not reported. The backend now returns its actual diagnosis, RecoveryResult and
+recorded RETESTING lifecycle. Its existing recovery engine retains each exact
+write/execute action for approval, checkpoints writes and runs a mandatory
+whole-project pytest retest. An attempt alone never implies recovery success;
+only the actual returned outcome is displayed. Severity remains unavailable
+when the backend does not supply it.
+
+ROLLED_BACK now has an explicit failure presentation, "Recovery rolled back",
+with the exact returned backend enum and retest message. Verification displays
+the exact CompletionGate enum (including NOT_VERIFIED), plus the returned backend
+and action states. Transport errors mark retained values as earlier observations.
+The existing completion rule still controls the final result; a failed recovery
+does not become VERIFIED.
 
 Verification shows the CompletionGate status, requirement coverage, evidence
 summaries, stale/superseded flags, missing/invalid evidence and contradictory
@@ -449,11 +462,15 @@ Normal production transport is labelled BACKEND RESPONSE / last returned data.
 An absent source label is shown as SOURCE NOT REPORTED. There is no renderer
 fixture switch, new IPC method, network service or alternate production backend.
 
-Phase 7 tests use deterministic fixtures and controlled providers.
-**Live Ollama permission, recovery and verification flows remain unverified.**
-See [PHASE7_REPORT.md](PHASE7_REPORT.md) for exact files, counts and validation.
-Phase 7 did not repackage the application. Phase 8 rebuilds the current desktop;
-its release results are recorded below.
+Initial Phase 7 tests used deterministic fixtures and controlled providers; its
+historical report makes no live AI claim. October 6 separately verified real
+Qwen permission/denial/approval, recovery, fresh retest and CompletionGate VERIFIED
+through the actual source Electron application. The targeted packaged UI probe
+now also captured real recovery success and failed recovery in the latest installed
+application: RECOVERED / VERIFIED and FAILED / ROLLED_BACK / NOT_VERIFIED. No AI,
+tool execution, evidence or backend response fixture was used in those live runs.
+See [../FINAL_ACCEPTANCE_REPORT.md](../FINAL_ACCEPTANCE_REPORT.md)
+for current evidence and [PHASE7_REPORT.md](PHASE7_REPORT.md) for the earlier scope.
 
 ## Final desktop polish and release (Phase 8)
 
@@ -478,12 +495,16 @@ fallback with a separate discard confirmation before reload. A crashed renderer
 shows a native error. Native close and unsaved/conflict guards remain in place;
 Ctrl+R/F5 cannot reload a dirty workspace.
 
-The validated release file is `release/OpenArise-0.1.0-win-x64.zip`, accompanied
-by `SHA256SUMS.txt` and `RELEASE_NOTES.txt`. Extract the complete ZIP to a writable
-folder and run `OpenArise.exe`; do not run from inside the archive. Preserve the
-full application folder and its resources when copying it. The portable and
-Setup EXEs under `.packaging/phase8-blocked-artifacts/` are review candidates:
-their execution is BLOCKED on this host, not validated.
+Latest rebuilt candidates are `release/OpenArise-0.1.0-win-x64.zip`,
+`release/OpenArise-0.1.0-win-x64-portable.exe` and
+`release/OpenArise-0.1.0-win-x64-setup.exe`, with current `SHA256SUMS.txt` and
+`RELEASE_NOTES.txt`. Extract the complete ZIP to a writable folder and run
+`OpenArise.exe`; preserve all resources. The latest ZIP normal launch is BLOCKED
+by this host's Application Control policy; portable execution and NSIS
+install/launch/uninstall are VERIFIED. Contents and bundled runtime are verified.
+Current MSI required validation is BLOCKED by system policy. Real packaged Qwen success/failure UI
+captures are distinct from both deterministic test fixtures and historical human
+reports. Old candidates remain separately in ignored packaging storage.
 
 Packaging copies only the compiled application, existing icon, backend modules,
 desktop Python hosts and isolated runtime. It excludes Node development
@@ -508,5 +529,84 @@ neither helper is packaged or accessible through IPC.
 See [PHASE8_REPORT.md](PHASE8_REPORT.md) and
 [RELEASE_VALIDATION.md](RELEASE_VALIDATION.md) for exact test totals, artifact
 hashes, launch evidence, installer results and remaining acceptance items.
-**Live Ollama/model permission, recovery and verified completion remain
-NOT VERIFIED.** No full production-readiness claim is made.
+**Targeted functional acceptance is VERIFIED: real packaged Ollama recovery and CompletionGate UI success/refusal. Distribution acceptance is BLOCKED by ZIP execution/MSI validation policy on this host.** No production-readiness claim is made.
+## Real Ollama integration — October 6, 2026
+
+Open a Python project: the AI panel automatically loads the existing bounded
+intelligence snapshot and reports the configured Ollama model's last availability
+check. Refresh context repeats these observations; submission refreshes workspace
+state before building the bounded context. Repository source is not dumped into
+the model prompt.
+
+Desktop defaults are OLLAMA_HOST=http://127.0.0.1:11434,
+OLLAMA_MODEL=qwen2.5-coder:7b and OLLAMA_TIMEOUT_SECONDS=180.
+Set these existing environment/.env configuration values before starting OpenArise;
+restart after changing them. Source launches retain ai-engine as the Python host
+working directory for .env lookup. Packaged applications use their bundled backend
+directory; inherited environment variables are the supported override without
+editing application resources. Configuration is never editable through renderer
+IPC. The standalone backend retains its legacy localhost/llama3 defaults; the
+desktop explicitly selects DesktopSettings using the same settings architecture.
+
+**Answer only** is the desktop default. The same AgentOrchestrator requests a
+JSON-schema-constrained message through OllamaProvider; tool calls are forbidden.
+The complete returned answer appears as literal, redacted, bounded proposal text.
+Generated code is not saved or tested automatically and remains UNVERIFIED under
+CompletionGate. Select **Agent actions** separately to propose existing registered
+tools. Writes/execution continue to stop for backend permission; Allow, Deny and
+Cancel use the existing approval/resume/cancellation methods.
+
+Inference is synchronous, with no streaming or invented progress. Availability
+uses five-second connect/read limits, generation uses a five-second connect and
+180-second read limit by default (configurable 30–900 seconds). The main adapter
+allows 30 seconds for startup/read commands and 15 minutes for agent execution/
+resume, accounting for multiple possible recovery/model calls. Transport loss or
+deadline expiry warns that earlier side effects may exist. Only pending approval
+can be cancelled; active inference cannot be interrupted from this UI.
+
+Ollama unavailable, missing configured model, generation rejection/invalid output,
+generation timeout, backend startup failure, project-context failure and agent
+failure now retain safe distinct reasons. Redacted, bounded stderr diagnostics
+remain in the development main-process console; raw exception values and stack
+traces do not cross IPC.
+
+Live acceptance uses the real service/model through the actual Electron renderer,
+preload, main process, Python host, BackendService and AgentOrchestrator. A source-
+only probe supplies the native picker path and drives DOM/native input; it injects
+no AI provider or backend response. Both specified prompts returned actual model
+text. A separate real write proposal stopped for permission and was denied without
+creating a file. The subsequent live recovery probe approved real mutations,
+detected an intentional fault, used the real recovery planner/engine, ran fresh
+pytest and received CompletionGate VERIFIED. Old passing proof became stale;
+a later external mutation invalidated verification. A separate real recovery
+failure rolled back and the gate refused completion. Original tests were preserved.
+Failed proof stays linked to actual fresh retest/recovery records, not erased.
+See [OLLAMA_INTEGRATION_REPORT.md](OLLAMA_INTEGRATION_REPORT.md) and
+[../FINAL_ACCEPTANCE_REPORT.md](../FINAL_ACCEPTANCE_REPORT.md) for exact evidence.
+
+Targeted final validation: **271 desktop tests (234 Vitest + 37 host)** and
+**188 backend tests**, production build, production smoke and development smoke
+passed. Normal npm start and npm run dev each showed one visible OpenArise main
+window and closed normally. Fresh ZIP, portable and NSIS artifacts contain the
+fixed build. Latest portable and installed NSIS launches passed; ZIP execution is
+BLOCKED by Application Control. Fresh MSI required ICE validation is BLOCKED
+with LGHT1105; no validated MSI was produced or installed.
+
+The actual installed packaged renderer/preload/main/bundled backend/Qwen path
+returned DENIED without mutation, then RECOVERED with fresh passing pytest proof
+and CompletionGate VERIFIED. The separate always-failing project returned FAILED,
+ROLLED_BACK and CompletionGate NOT_VERIFIED, shown in actual renderer text and
+screenshots. Both final results were checked at 1320x880, 1050x740 and 760x540.
+This external QA controller uses a loopback main-process inspector, an isolated
+profile and supplied disposable folder-picker paths; it clicks existing UI
+controls and records unchanged real responses. It is not packaged or exposed
+through IPC. Normal executable launches were separately tested without these QA
+flags. This is automated real UI validation, not a new human-operated check.
+
+One repeat at the unchanged 180-second default hit a real Ollama timeout. The
+passing QA run used the existing OLLAMA_TIMEOUT_SECONDS=300 environment override;
+defaults, dependencies and backend source were not changed by this targeted fix.
+Inference duration remains hardware dependent. Publisher signing and a clean
+Windows host remain NOT VERIFIED. No policy/security check was bypassed. Review
+date: October 8, 2026; evidence retains actual October 7–8 timestamps. See the
+final acceptance and release reports for exact proof IDs, hashes and limitations.

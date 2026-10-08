@@ -1,10 +1,12 @@
 import os
 import subprocess
+import tempfile
 import sys
 from typing import Any, Dict
 from app.tools.base import BaseTool
 from app.tools.permissions import RiskLevel
 from app.tools.fs import _is_safe_path
+from app.verification.snapshot import project_snapshot
 
 class PythonExecutionTool(BaseTool):
     name: str = "execute_python"
@@ -99,20 +101,20 @@ class TestExecutionTool(BaseTool):
             cmd.append(test_path)
             
         try:
-            # We don't want tests running forever in agent logic
-            result = subprocess.run(
-                cmd,
-                cwd=self.project_root,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
+            before = project_snapshot(self.project_root)
+            # A fresh bytecode namespace prevents same-size rapid edits from
+            # importing timestamp-valid old .pyc files during a recovery retest.
+            with tempfile.TemporaryDirectory(prefix="openarise-pytest-cache-") as cache:
+                cmd = [sys.executable, "-B", "-X", "pycache_prefix=" + cache, *cmd[1:]]
+                result = subprocess.run(cmd, cwd=self.project_root, capture_output=True,
+                                        text=True, timeout=60)
             
             return {
                 "exit_code": result.returncode,
                 "stdout": result.stdout,
                 "stderr": result.stderr,
-                "command": " ".join(cmd)
+                "command": " ".join(cmd),
+                "project_snapshot": before if before == project_snapshot(self.project_root) else None
             }
         except subprocess.TimeoutExpired as e:
             return {

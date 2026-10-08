@@ -9,7 +9,7 @@ import { AIPanel } from './AI/AIPanel';
 import { useTerminal } from '../workspace/useTerminal';
 import { TerminalPanel } from './Terminal/TerminalPanel';
 import { EditorBoundary } from '../editor/EditorBoundary';
-import { lazy, Suspense, useState, type CSSProperties } from 'react';
+import { lazy, Suspense, useEffect, useState, type CSSProperties } from 'react';
 import type { ConnectionState } from '../types/backend';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { Explorer, FileIcon } from './Explorer';
@@ -19,7 +19,8 @@ const MonacoEditor = lazy(() => import('../editor/MonacoEditor'));
 export function AppShell({ connection }: { connection: ConnectionState }) {
   const bridge = window.openarise?.project;
   const workspace = useWorkspace(bridge);
-  const ai = useAI(workspace.project);
+  const ai = useAI(workspace.project, true);
+  useEffect(() => { if (workspace.project) void ai.loadContext(); }, [workspace.project?.id]);
   const intelligence = useIntelligence(workspace.project);
   const [intelligenceView, setIntelligenceView] = useState<IntelligenceView | null>(null);
   const navigate = (name: Section) => { setSection(name); setIntelligenceView(name === 'Explorer' || name === 'AI' ? null : name); };

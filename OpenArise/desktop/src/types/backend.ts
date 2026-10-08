@@ -36,7 +36,7 @@ export type BackendRequest = { request_id: RequestId } & (
   | { method: 'request_agent_execution'; params: { prompt: string; context_data?: JsonObject } }
 );
 // Desktop errors are separate from Python error codes and envelopes.
-export type ClientErrorCode = 'not_connected' | 'invalid_message' | 'service_closed' | 'bridge_unavailable' | 'transport_error';
+export type ClientErrorCode = 'not_connected' | 'invalid_message' | 'service_closed' | 'bridge_unavailable' | 'transport_error' | 'backend_startup_failed' | 'backend_timeout';
 export type ClientResult<T = JsonValue> =
   | { kind: 'backend'; response: BackendResponse<T>; source?: 'backend' | 'test_fixture' }
   | { kind: 'unavailable'; request_id: RequestId; code: ClientErrorCode; message: string };

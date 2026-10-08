@@ -23,14 +23,21 @@ const link = shape({ link_id: text, source_id: text, target_id: text, link_type:
 const drift = shape({ requirement_id: text, state: enumeration('NO_DRIFT', 'POTENTIAL_DRIFT', 'CONFIRMED_STRUCTURAL_DRIFT', 'UNRESOLVED'), reason: text, related_implementations: strings, related_tasks: strings });
 const timeline = shape({ event_id: text, timestamp: text, event_type: enumeration('PROJECT_CREATED', 'PROJECT_SCANNED', 'BLUEPRINT_CREATED', 'REQUIREMENT_CREATED', 'REQUIREMENT_UPDATED', 'FEATURE_CREATED', 'TASK_CREATED', 'IMPLEMENTATION_MAPPED', 'EVIDENCE_LINKED', 'HEALTH_CHECKED', 'DRIFT_DETECTED', 'AGENT_STATE_CHANGED'), title: text, description: text, related_requirement_ids: strings, related_feature_ids: strings, related_task_ids: strings });
 const bounded = shape({ project_name: text, total_files: count, requirements_count: count, traceability_nodes: count, health_issues: count, missing_dependencies: count });
-const snapshot = shape({ project_id: text, project_name: text, scan_timestamp: text,
+const withOllama = (check: Check): Check => value => {
+  if (!object(value)) return false;
+  const { ollama, ...rest } = value;
+  return check(rest) && (!('ollama' in value) || shape({ status: enumeration('ready', 'ollama_unavailable', 'model_unavailable'),
+    message: text, model: v => text(v) && String(v).length <= 200,
+    timeout_seconds: v => count(v) && Number(v) >= 30 && Number(v) <= 900 })(ollama));
+};
+const snapshot = withOllama(shape({ project_id: text, project_name: text, scan_timestamp: text,
   project_state_summary: dictionary(['total_files', 'python_modules', 'dependencies_declared'], count),
   blueprint_summary: dictionary(['requirements', 'features', 'tasks'], count),
   traceability_summary: dictionary(['nodes', 'links'], count),
   environment_summary: dictionary(['python_available', 'virtualenv_present', 'git_available'], bool),
   health_summary: dictionary(['total_checks', 'blocked', 'errors', 'warnings', 'missing_dependencies'], count),
   requirement_summary: shape({ total: count, by_verification_status: dictionary(['PENDING', 'PARTIALLY_VERIFIED', 'VERIFIED', 'NOT_VERIFIED', 'INCONCLUSIVE'], count) }),
-  drift_summary: array(drift), intelligence_summary: v => bounded(v) || v === 'Context unavailable' || object(v) && Object.keys(v).length === 0 });
+  drift_summary: array(drift), intelligence_summary: v => bounded(v) || v === 'Context unavailable' || object(v) && Object.keys(v).length === 0 }));
 export const intelligenceChecks: Record<string, Check> = {
   get_project_information: info,
   get_project_state: shape({ project_info: info, scan_timestamp: text, git_available: bool, counts: shape({ files: count, python_modules: count, test_files: count }), files: array(shape({ relative_path: text, file_type: text, size: count, is_test: bool, is_source: bool, is_config: bool })), frameworks: strings, dependencies: array(shape({ name: text, version_specifier: maybe, source_file: text })), truncated: bool }),

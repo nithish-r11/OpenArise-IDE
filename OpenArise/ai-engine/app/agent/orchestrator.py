@@ -7,13 +7,14 @@ from typing import Optional
 
 from app.agent.state import AgentState, AgentLifecycleError
 from app.models.schemas import (
-    ActionState, AgentAction, AgentEvent, AgentRequest, AgentResponse,
+    ActionState, AgentAction, AgentMessageAction, AgentEvent, AgentRequest, AgentResponse,
     DiagnosisResult, EvidenceRecord, EvidenceStrength, EvidenceType, ExecutionState,
     FailureCategory, FailureEvent, FailureStatus, PendingAction, ToolResult,
     VerificationStatus,
 )
 from app.context.manager import ContextManager
 from app.llm.base import LLMProvider
+from app.llm.ollama import OllamaProvider, OllamaError, OllamaInvalidResponse
 from app.tools.base import ToolRegistry
 from app.tools.execution import TestExecutionTool
 from app.tools.permissions import PermissionAction, PermissionManager, RiskLevel
@@ -40,7 +41,11 @@ Do not claim tests passed without test evidence.
 Clearly distinguish reasoning, proposed actions, and completed actions.
 Use only registered tools. Associate tool calls with the supplied requirement IDs.
 Follow the current agent state. Do not install dependencies automatically.
-Be concise and structured."""
+For explanations or code snippets without an explicit file operation, use action_type message with empty tool_calls and put the answer in message.
+Only propose tool calls when the user explicitly requests a file read/write or execution. Never invent a file path.
+Put the complete requested answer or code snippet in message, not a plan to answer later. Do not ask permission to display text; approval is for tool actions.
+Explain projects using only supplied context facts. If only bounded metadata is supplied, say so and do not invent file contents.
+Generated code is a proposal, not a saved or verified change. Be concise and structured."""
 
 
 class AgentOrchestrator:
@@ -59,7 +64,7 @@ class AgentOrchestrator:
         self.failure_history = failure_history or FailureHistoryManager()
         self.memory_manager = MemoryManager(self.project_root)
         self.checkpoint_manager = CheckpointManager(self.project_root)
-        self.recovery_planner = RecoveryPlanner(self.llm, self.memory_manager)
+        self.recovery_planner = RecoveryPlanner(self.llm, self.memory_manager, self.tool_registry)
         self.recovery_engine = RecoveryEngine(
             self.recovery_planner, self.tool_registry, self.permission_manager, self.checkpoint_manager
         )
@@ -81,6 +86,10 @@ class AgentOrchestrator:
         self._tool_results = []
         self._next_tool = 0
         self._recovery_attempts = 0
+        self._recovery_session = None
+        self._recovery_result = None
+        self._failure = None
+        self._recovery_calls = []
 
     def _event(self, event_type, tool_call_id=None):
         if self._request:
@@ -100,13 +109,17 @@ class AgentOrchestrator:
         data = {
             "action_type": self._action.action_type if self._action else None,
             "agent_message": self._action.message if self._action else None,
-            "tool_calls": [t.model_dump(mode="json") for t in self._action.tool_calls] if self._action else [],
+            "tool_calls": [t.model_dump(mode="json") for t in self._action.tool_calls + self._recovery_calls] if self._action else [],
             "tool_results": [r.model_dump(mode="json") for r in self._tool_results],
             "requirements": [r.model_dump(mode="json") for r in self.requirements],
             "evidence": [e.model_dump(mode="json") for e in self.evidence_ledger.list_evidence()],
             "verification": verification.model_dump(mode="json") if verification else None,
             "events": [e.model_dump(mode="json") for e in self.execution_state.events],
         }
+        if self._recovery_result:
+            data["recovery"] = self._recovery_result.model_dump(mode="json")
+        if self._failure:
+            data["error"] = self._failure.model_dump(mode="json")
         if error:
             data["error"] = error
         response = AgentResponse(
@@ -132,6 +145,10 @@ class AgentOrchestrator:
             self._tool_results = []
             self._next_tool = 0
             self._recovery_attempts = 0
+            self._recovery_session = None
+            self._recovery_result = None
+            self._failure = None
+            self._recovery_calls = []
             self.execution_state = ExecutionState(current_state=self.state.value)
             self.evidence_ledger.clear()
             self.requirements = []
@@ -139,17 +156,31 @@ class AgentOrchestrator:
                 self._transition_to(AgentState.THINKING)
                 self.context.update_request(request.prompt)
                 self.context.project_state = dict(request.context_data or {})
+                if isinstance(self.llm, OllamaProvider):
+                    self.llm.check_available()
                 self.requirements = self.requirement_extractor.extract(request.prompt)
+                mode = (request.context_data or {}).get("response_mode", "agent_actions")
+                if mode not in ("text_only", "agent_actions"):
+                    raise ValueError("Unknown response mode.")
+                text_only = mode == "text_only"
                 prompt = (
                     f"User Request: {request.prompt}\n\nContext Summary:\n"
                     f"{json.dumps(self.context.get_context_summary(), indent=2)}\n\n"
-                    f"Requirements:\n{json.dumps([r.model_dump(mode='json') for r in self.requirements])}\n\n"
-                    f"Available tools:\n{json.dumps(self.tool_registry.get_all_schemas())}\n\nDetermine the next action."
                 )
+                if text_only:
+                    prompt += "Answer the request now in message with the complete requested code or explanation. No tools, file changes, execution or approval requests. Project facts are bounded metadata; do not invent file contents."
+                else:
+                    prompt += (
+                        f"Requirements:\n{json.dumps([r.model_dump(mode='json') for r in self.requirements])}\n\n"
+                        f"Available tools:\n{json.dumps(self.tool_registry.get_all_schemas())}\n\nDetermine the next action."
+                    )
                 self._transition_to(AgentState.PLANNING)
                 generated = self.llm.generate_structured(
-                    prompt=prompt, schema=AgentAction, system_prompt=SYSTEM_PROMPT
+                    prompt=prompt, schema=AgentMessageAction if text_only else AgentAction,
+                    system_prompt=SYSTEM_PROMPT, **({"json_schema": True} if text_only else {})
                 )
+                if text_only:
+                    generated = AgentMessageAction.model_validate(generated)
                 self._action = AgentAction.model_validate(generated).model_copy(deep=True)
                 ids = [call.tool_call_id for call in self._action.tool_calls]
                 if len(ids) != len(set(ids)) or any(not value for value in ids):
@@ -163,7 +194,26 @@ class AgentOrchestrator:
         with self._lock:
             if request_id not in self._responses:
                 raise AgentLifecycleError("request_not_found", "Unknown agent request.")
-            return self._responses[request_id].model_copy(deep=True)
+            response = self._responses[request_id].model_copy(deep=True)
+            from app.verification.snapshot import project_snapshot
+            changed = any("project_snapshot" in e["result"] and not e["result"].get("superseded")
+                          and e["result"]["project_snapshot"] != project_snapshot(self.project_root)
+                          for e in response.data.get("evidence", []))
+            if changed and response.status in ("success", "unverified") and response.data.get("verification"):
+                from app.models.schemas import Requirement
+                ledger = EvidenceLedger()
+                for row in response.data["evidence"]:
+                    ledger.add_evidence(EvidenceRecord.model_validate(row))
+                verifier = IndependentVerifier(self.project_root, ledger)
+                reqs = [Requirement.model_validate(row) for row in response.data["requirements"]]
+                gate = CompletionGate(verifier).evaluate(self.memory_manager.project_id, reqs,
+                                                         recovery_attempts=response.data["verification"]["report"]["recovery_attempts"])
+                response.data["verification"] = gate.model_dump(mode="json")
+                response.data["evidence"] = [e.model_dump(mode="json") for e in ledger.list_evidence()]
+                response.status = "success" if gate.overall_status == VerificationStatus.VERIFIED else "unverified"
+                response.message = "Action completed and fully verified." if response.status == "success" else "Project proof is stale or incomplete; fresh tests are required."
+                self._responses[request_id] = response.model_copy(deep=True)
+            return response
 
     def _require_pending(self, request_id, tool_call_id=None):
         if request_id not in self._requests:
@@ -200,7 +250,7 @@ class AgentOrchestrator:
             self._pending = None
             self._pending_tool = None
             try:
-                return self._continue()
+                return self._continue_recovery() if self._recovery_session else self._continue()
             except Exception as exc:
                 return self._fail_internal(exc)
 
@@ -226,6 +276,11 @@ class AgentOrchestrator:
         ))
         self._pending = None
         self._pending_tool = None
+        if self._recovery_session:
+            from app.models.schemas import RecoveryState
+            self._recovery_result.status = RecoveryState.BLOCKED
+            self._recovery_result.final_result = message
+            self._recovery_session = None
         return self._finish(action_state, message)
 
     def _continue(self):
@@ -287,6 +342,8 @@ class AgentOrchestrator:
             if not result.success:
                 try:
                     self._handle_failure(result)
+                    if self._recovery_session:
+                        return self._continue_recovery()
                 except Exception:
                     logger.exception("Failure diagnosis/recovery was unavailable.")
         return self._finish()
@@ -323,7 +380,8 @@ class AgentOrchestrator:
                 requirement_id=requirement.requirement_id, evidence_type=evidence_type,
                 strength=strength, source=call.tool_name, summary=f"Tool {call.tool_name} execution",
                 result={"success": result.success, "exit_code": result.exit_code,
-                        "output": result.output, "error": result.error, "executed": result.metadata.get("executed")},
+                        "output": result.output, "error": result.error, "executed": result.metadata.get("executed"),
+                        **({"project_snapshot": result.output["project_snapshot"]} if is_test and isinstance(result.output, dict) and "project_snapshot" in result.output else {})},
                 tool_call_id=call.tool_call_id,
             )
             self.evidence_ledger.add_evidence(evidence)
@@ -338,7 +396,7 @@ class AgentOrchestrator:
             category=detection["category"], summary=detection["summary"],
             error_signature=detection["error_signature"], affected_file=detection["affected_file"],
             evidence=SecretRedactor().redact_dict(
-                {"output": result.output, "error": result.error, "exit_code": result.exit_code}
+                {"output": result.output, "error": result.error, "exit_code": result.exit_code, "user_request": self._request.prompt}
             ),
         )
         self.context.add_failure(failure.model_dump(mode="json"))
@@ -351,12 +409,69 @@ class AgentOrchestrator:
         self.failure_history.record_failure(failure)
         self._transition_to(AgentState.RECOVERING)
         self._recovery_attempts += 1
-        recovery = self.recovery_engine.attempt_recovery(
-            failure, diagnosis, attempts=1,
+        session = self.recovery_engine.prepare_recovery(
+            failure, diagnosis, attempts=self._recovery_attempts,
             repeated_count=3 if self.failure_history.detect_loop(result.tool_name, detection["error_signature"]) else 1,
         )
-        self.memory_manager.update_with_recovery(memory_record.memory_id, recovery)
-        self._event("recovery_finished", result.tool_call_id)
+        self._failure = failure
+        self._recovery_result = session["result"]
+        session["memory_id"] = memory_record.memory_id
+        session["failed_result"] = result
+        affected = [e.requirement_id for e in self.evidence_ledger.list_evidence() if e.tool_call_id == result.tool_call_id]
+        for call in session["calls"]:
+            call.requirement_ids = list(dict.fromkeys(affected))
+        self._recovery_calls.extend(session["calls"])
+        self._recovery_session = session
+        if session["done"]:
+            self._complete_recovery()
+
+    def _recovery_state(self, state, call_id, started):
+        self._transition_to(AgentState(state))
+        if started:
+            self._event("tool_started", call_id)
+
+    def _continue_recovery(self):
+        session = self._recovery_session
+        call = self.recovery_engine.advance_recovery(session, self._record_result, self._recovery_state)
+        if call:
+            tool = self.tool_registry.get_tool(call.tool_name)
+            self._pending_tool = tool
+            self._pending = PendingAction(request_id=self._request.request_id, tool_call_id=call.tool_call_id,
+                                          tool_call=call.model_copy(deep=True), risk_level=tool.risk_level,
+                                          action_index=session["index"])
+            self._transition_to(AgentState.PERMISSION_REQUIRED)
+            self._event("permission_required", call.tool_call_id)
+            return self._response("permission_required", session["result"].final_result, ActionState.PERMISSION_REQUIRED)
+        self._complete_recovery()
+        return self._continue()
+
+    def _complete_recovery(self):
+        from app.models.schemas import RecoveryState
+        session = self._recovery_session
+        recovery = session["result"]
+        if recovery.status == RecoveryState.RECOVERED:
+            failed = session["failed_result"]
+            retest_id = recovery.evidence["retest_tool_call_id"]
+            for original in list(self.evidence_ledger.list_evidence()):
+                if original.tool_call_id != failed.tool_call_id:
+                    continue
+                proof = next((e for e in self.evidence_ledger.list_evidence()
+                              if e.requirement_id == original.requirement_id and e.tool_call_id == retest_id
+                              and e.evidence_type == EvidenceType.TEST_PASS), None)
+                if not proof:
+                    continue
+                link = EvidenceRecord(requirement_id=original.requirement_id, evidence_type=EvidenceType.RECOVERY_RESULT,
+                                      strength=EvidenceStrength.SUPPORTING, source="recovery_engine",
+                                      summary="Real recovery retest returned exit zero.",
+                                      result={"status": "RECOVERED", "failed_tool_call_id": failed.tool_call_id,
+                                              "retest_tool_call_id": retest_id, "proof_id": proof.evidence_id})
+                self.evidence_ledger.add_evidence(link)
+                original.result.update(resolved_by=proof.evidence_id, recovery_evidence=link.evidence_id)
+                if self.independent_verifier.resolution_is_valid(original):
+                    failed.metadata["resolved_by"] = proof.evidence_id
+        self.memory_manager.update_with_recovery(session["memory_id"], recovery, session.get("plan"))
+        self._event("recovery_finished", session["failed_result"].tool_call_id)
+        self._recovery_session = None
 
     def _finish(self, terminal=None, message=None):
         self._transition_to(AgentState.VERIFYING)
@@ -367,7 +482,9 @@ class AgentOrchestrator:
         if terminal is not None:
             self._transition_to(AgentState(terminal.value.upper()))
             return self._response(terminal.value, message, terminal, gate)
-        if any(not r.success for r in self._tool_results):
+        if any(not r.success and not any(
+                e.tool_call_id == r.tool_call_id and self.independent_verifier.resolution_is_valid(e)
+                for e in self.evidence_ledger.list_evidence()) for r in self._tool_results):
             self._transition_to(AgentState.FAILED)
             return self._response("failure", "One or more tools failed; inspect tool results and verification.", ActionState.FAILED, gate)
         self._transition_to(AgentState.COMPLETED)
@@ -385,14 +502,18 @@ class AgentOrchestrator:
         self._pending = None
         self._pending_tool = None
         self._transition_to(AgentState.FAILED)
-        failure = FailureEvent(
-            category=FailureCategory.UNKNOWN, summary=f"Orchestrator error: {type(exc).__name__}",
-        )
+        provider_error = isinstance(exc, (OllamaError, OllamaInvalidResponse))
+        category = {"ollama_unavailable": FailureCategory.ENVIRONMENT_ERROR,
+                    "model_unavailable": FailureCategory.CONFIGURATION_ERROR,
+                    "llm_timeout": FailureCategory.TIMEOUT}.get(getattr(exc, "code", None), FailureCategory.UNKNOWN)
+        safe_message = exc.safe_message if provider_error else "Agent execution failed. Consult backend diagnostics and retained tool results; no successful action is confirmed."
+        failure = FailureEvent(category=category, summary=safe_message if provider_error else f"Orchestrator error: {type(exc).__name__}",
+                               error_signature=exc.code if provider_error else type(exc).__name__)
         self.context.add_failure(failure.model_dump(mode="json"))
         gate = self.completion_gate.evaluate(
             self.memory_manager.project_id, self.requirements, recovery_attempts=self._recovery_attempts
         )
         return self._response(
-            "failure", "Agent processing failed. Inspect backend logs and retained tool results.",
+            "failure", safe_message,
             ActionState.FAILED, gate, error=failure.model_dump(mode="json"),
         )

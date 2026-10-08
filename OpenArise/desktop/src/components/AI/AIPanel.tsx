@@ -19,14 +19,24 @@ export function AIPanel({ ai, project, blocked, expanded, onToggle }: {
   const current = ai.current, result = current?.result;
   const completion = completionPresentation(current);
   const conversation = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (!result?.pending_action && conversation.current) conversation.current.scrollTop = 0; }, [current?.state, result?.status]);
+  useEffect(() => {
+    const panel = conversation.current;
+    if (!result?.pending_action && panel) {
+      const answer = panel.querySelector('.ai-model-response');
+      panel.scrollTop = answer ? panel.scrollTop + answer.getBoundingClientRect().top - panel.getBoundingClientRect().top - 8 : 0;
+    }
+  }, [current?.state, result?.status]);
   const summary = ai.context?.intelligence_summary;
   const facts = summary && typeof summary === 'object' && !Array.isArray(summary) ? summary : null;
+  const provider = ai.context?.ollama;
+  const ollama = provider && typeof provider === 'object' && !Array.isArray(provider) ? provider : null;
   return <aside className={'ai-workspace' + (expanded ? ' ai-expanded' : '')} aria-label="AI workspace">
     <div className="panel-heading"><button className="ai-toggle" aria-label="Toggle AI workspace" onClick={onToggle}>OpenArise AI <span>✧</span></button></div>
     <div className="ai-content">
       <div className="ai-context"><span className="eyebrow">PROJECT CONTEXT</span><strong>{project?.name ?? 'No project selected'}</strong>
-        <p>{facts ? <>{String(facts.total_files ?? 'Unknown')} files · {String(facts.requirements_count ?? 'Unknown')} requirements<br />{String(facts.health_issues ?? 'Unknown')} health findings · {String(facts.traceability_nodes ?? 'Unknown')} traceability nodes</> : 'Context not loaded'}</p>
+        <p>{facts ? <>{String(facts.total_files ?? 'Unknown')} files · {String(facts.requirements_count ?? 'Unknown')} requirements<br />{String(facts.health_issues ?? 'Unknown')} health findings · {String(facts.traceability_nodes ?? 'Unknown')} traceability nodes</> : ai.contextState === 'loading' ? 'Loading project context…' : ai.contextState === 'unavailable' ? 'Project context unavailable' : 'Context not loaded'}</p>
+        {ai.contextError && <p role="status">{ai.contextError}</p>}
+        {ollama && <p className="ollama-status" aria-label="Ollama availability"><b>{ollama.status === 'ready' ? 'Ollama detected' : ollama.status === 'model_unavailable' ? 'Configured model unavailable' : 'Ollama unavailable'}</b><br />Model: {String(ollama.model)}<br />{String(ollama.message)}<br /><small>Last availability check · synchronous inference · {String(ollama.timeout_seconds)}s generation timeout</small></p>}
         {ai.environment && <p>Backend Python {String(ai.environment.python_version ?? 'unavailable')} · {ai.environment.python_available ? 'available' : 'unavailable'}<br />{ai.environment.virtualenv_present ? ai.environment.virtualenv_usable ? 'Project environment detected' : 'Project environment unavailable' : 'No project environment'}<br /><small>Observation scope: {String(ai.environment.inspection_scope)}</small></p>}
         <button disabled={!project || ai.busy} onClick={() => void ai.loadContext()}>Refresh context</button>
       </div>
@@ -44,6 +54,7 @@ export function AIPanel({ ai, project, blocked, expanded, onToggle }: {
             {current.state === 'submitting' && <p>Waiting for the synchronous backend response. Activity will appear when returned; this is not live streaming.</p>}
             {result && <><p>{result.message}</p>{result.status === 'failure' && result.data.tool_results.length === 0 && current.source !== 'test_fixture' && <p>Check that your configured Ollama service and model are available. No AI change was confirmed.</p>}<small>Backend state: {result.current_state}</small></>}
             {current.error && <p role="alert">{current.error}</p>}
+            {result?.data.model_response && <section className="ai-model-response" aria-label="Model response"><span className="eyebrow">MODEL RESPONSE · PROPOSAL</span><pre>{result.data.model_response}</pre><small>Generated text is not proof of a saved change, executed action or passed test. CompletionGate remains authoritative.</small></section>}
             <VerificationCard item={current} />
           </article>
           <RecoveryCard item={current} />
@@ -55,7 +66,7 @@ export function AIPanel({ ai, project, blocked, expanded, onToggle }: {
       <form className="ai-composer" onSubmit={event => { event.preventDefault(); void ai.submit(blocked); }}>
         {ai.error && <p className="ai-error" role="alert">{ai.error}</p>}
         {blocked && <p>Save or discard editor changes before AI execution.</p>}
-        <label htmlFor="ai-prompt">Ask OpenArise</label>
+        <div className="ai-composer-heading"><label htmlFor="ai-prompt">Ask OpenArise</label><div className="ai-mode" role="group" aria-label="Request mode"><button type="button" aria-pressed={ai.mode === 'text_only'} disabled={ai.busy || !!ai.pending} onClick={() => ai.setMode('text_only')} title="Display an answer without tools">Answer only</button><button type="button" aria-pressed={ai.mode === 'agent_actions'} disabled={ai.busy || !!ai.pending} onClick={() => ai.setMode('agent_actions')} title="Propose tools through backend permission gates">Agent actions</button></div></div>
         <textarea id="ai-prompt" maxLength={12000} rows={3} value={ai.prompt} onChange={event => ai.setPrompt(event.target.value)} placeholder="Describe a change to this project…"
           onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void ai.submit(blocked); } }} />
         <div><span>{ai.busy ? 'Backend command active' : ai.prompt ? 'Draft · Enter to send' : 'Shift + Enter for a new line'}</span><button type="button" disabled={!ai.prompt || ai.busy} onClick={() => ai.setPrompt('')}>Clear</button><button className="ai-submit" disabled={!project || !ai.prompt.trim() || ai.busy || !!ai.pending || blocked}>{ai.busy ? 'Waiting…' : 'Send ↗'}</button></div>

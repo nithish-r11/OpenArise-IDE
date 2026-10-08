@@ -6,6 +6,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const asar = require('@electron/asar');
 const root = await realpath(process.argv[2] ?? 'release/win-unpacked');
@@ -40,6 +41,24 @@ const forbidden = contents.filter(p => /(?:^|\/)(?:node_modules|__pycache__|\.py
 assert.deepEqual(forbidden, [], 'Unexpected development/cache/secret/test artifacts');
 assert.ok(!contents.some(p => /(?:^|\/)pip(?:-|\/)/.test(p)), 'pip is not a product runtime dependency');
 const resources = path.join(root, 'resources');
+async function comparePythonSource(source, destination) {
+  let count = 0;
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    if (entry.name === '__pycache__') continue;
+    const sourcePath = path.join(source, entry.name), packagedPath = path.join(destination, entry.name);
+    assert.equal(entry.isSymbolicLink(), false, 'Linked source: ' + sourcePath);
+    if (entry.isDirectory()) count += await comparePythonSource(sourcePath, packagedPath);
+    else if (entry.name.endsWith('.py')) {
+      assert.deepEqual(await readFile(packagedPath), await readFile(sourcePath), 'Packaged Python differs from current source: ' + sourcePath);
+      count++;
+    }
+  }
+  return count;
+}
+const backendSourceFiles = await comparePythonSource(fileURLToPath(new URL('../../ai-engine/app/', import.meta.url)), path.join(resources, 'ai-engine/app'));
+const hostSourceFiles = await comparePythonSource(fileURLToPath(new URL('../python/', import.meta.url)), path.join(resources, 'desktop/python'));
+assert.equal(contents.filter(p => p.startsWith('resources/ai-engine/app/') && p.endsWith('.py')).length, backendSourceFiles);
+assert.equal(contents.filter(p => p.startsWith('resources/desktop/python/') && p.endsWith('.py')).length, hostSourceFiles);
 const python = path.join(resources, 'ai-engine/.venv/Scripts/python.exe');
 const supervisor = path.join(resources, 'desktop/python/process_supervisor.py');
 const env = { ...process.env, PATH: path.join(process.env.SystemRoot ?? 'C:/Windows', 'System32'), PYTHONIOENCODING: 'utf-8' };
@@ -85,7 +104,7 @@ const executed = await run(['-I', '-B', '-u', supervisor, python, '-B', path.joi
 assert.match(executed.stdout, /PACKAGED_PYTHON_RUN/);
 const tested = await run(['-I', '-B', '-u', supervisor, python, '-B', '-m', 'pytest', '-q']);
 assert.match(tested.stdout, /1 passed/);
-console.log(JSON.stringify({ status: 'VERIFIED', root, version, asarEntries: entries.length, packageFiles: contents.length,
+console.log(JSON.stringify({ status: 'VERIFIED', root, version, asarEntries: entries.length, packageFiles: contents.length, backendSourceFiles, hostSourceFiles,
   applicationArchiveSHA256: createHash('sha256').update(await readFile(archive)).digest('hex'),
-  checks: ['clean package contents', 'identity/version', 'isolated bundled imports', 'real file read/save', 'real backend project/environment', 'supervised Python', 'real pytest: 1 passed'],
+  checks: ['clean package contents', 'identity/version', 'current backend/host source bytes', 'isolated bundled imports', 'real file read/save', 'real backend project/environment', 'supervised Python', 'real pytest: 1 passed'],
   minimalPATH: env.PATH, project, liveAI: 'NOT VERIFIED', electronLaunch: 'SEPARATE CHECK REQUIRED' }, null, 2));

@@ -6,8 +6,17 @@ export function completionPresentation(item?: AIHistoryItem): { state: Presentat
   const r = item.result, v = r.data.verification;
   if (r.pending_action || ['permission_required', 'approved', 'denied', 'cancelled'].includes(r.status))
     return { state: 'blocked', final: 'BLOCKED', reason: r.status === 'denied' ? 'The backend denied the pending action.' : r.status === 'cancelled' ? 'The backend cancelled the pending request.' : 'Permission must be resolved before completion.' };
-  const failedEvidence = r.data.evidence.some(e => (e.evidence_type === 'TEST_FAIL' || e.strength === 'CONTRADICTORY' || e.success === false || (e.exit_code !== null && e.exit_code !== 0)));
-  if (r.status === 'failure' || r.action_state === 'failed' || r.data.tool_results.some(t => !t.success) || failedEvidence || v?.overall_status === 'NOT_VERIFIED')
+  const resolved = (e: typeof r.data.evidence[number]) => {
+    const proof = r.data.evidence.find(p => p.evidence_id === e.resolved_by);
+    const recovery = r.data.evidence.find(p => p.evidence_id === e.recovery_evidence);
+    return r.data.recovery?.status === 'RECOVERED' && !!proof && !!recovery
+      && recovery.evidence_type === 'RECOVERY_RESULT' && recovery.requirement_id === e.requirement_id
+      && proof.requirement_id === e.requirement_id && proof.evidence_type === 'TEST_PASS' && proof.strength === 'DIRECT'
+      && proof.success === true && proof.exit_code === 0 && !proof.stale && !proof.superseded
+      && r.data.tool_results.some(t => t.tool_call_id === proof.tool_call_id && t.executed && t.success && t.exit_code === 0);
+  };
+  const failedEvidence = r.data.evidence.some(e => !resolved(e) && (e.evidence_type === 'TEST_FAIL' || e.strength === 'CONTRADICTORY' || e.success === false || (e.exit_code !== null && e.exit_code !== 0)));
+  if (r.status === 'failure' || r.action_state === 'failed' || r.data.tool_results.some(t => !t.success && !r.data.evidence.some(e => e.tool_call_id === t.tool_call_id && e.resolved_by === t.resolved_by && resolved(e))) || failedEvidence || v?.overall_status === 'NOT_VERIFIED')
     return { state: 'failed', final: 'FAILED', reason: 'Returned failure or contradictory evidence prevents verified completion.' };
   if (!v) return { state: 'unavailable', final: 'UNAVAILABLE', reason: 'The backend did not return a CompletionGate result.' };
   const report = v.report;

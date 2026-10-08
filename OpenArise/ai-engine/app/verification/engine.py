@@ -6,6 +6,7 @@ from typing import Optional
 from app.models.schemas import EvidenceType, EvidenceStrength, VerificationStatus, RequirementResult, ConfidenceLevel
 from app.verification.evidence import EvidenceLedger
 from app.tools.fs import _is_safe_path
+from app.verification.snapshot import project_snapshot
 
 
 class IndependentVerifier:
@@ -38,6 +39,23 @@ class IndependentVerifier:
         except (OSError, SyntaxError, UnicodeError):
             return False
 
+    def resolution_is_valid(self, record):
+        """Only a linked real recovery retest can resolve retained failed evidence."""
+        proof = self.ledger.get_evidence(record.result.get("resolved_by"))
+        recovery = self.ledger.get_evidence(record.result.get("recovery_evidence"))
+        if not proof or not recovery or proof.requirement_id != record.requirement_id or recovery.requirement_id != record.requirement_id:
+            return False
+        return (proof.evidence_type == EvidenceType.TEST_PASS and proof.strength == EvidenceStrength.DIRECT
+                and proof.result.get("success") is True and proof.result.get("exit_code") == 0
+                and proof.result.get("executed") is True and not proof.result.get("stale") and not proof.result.get("superseded")
+                and proof.result.get("project_snapshot") is not None
+                and proof.result["project_snapshot"] == project_snapshot(self.project_root)
+                and recovery.evidence_type == EvidenceType.RECOVERY_RESULT
+                and recovery.result.get("status") == "RECOVERED"
+                and recovery.result.get("retest_tool_call_id") == proof.tool_call_id
+                and recovery.result.get("failed_tool_call_id") == record.tool_call_id
+                and recovery.result.get("proof_id") == proof.evidence_id)
+
     def verify_requirement(self, req) -> RequirementResult:
         evidence = self.ledger.get_by_requirement(req.requirement_id)
         contradictions = []
@@ -50,7 +68,14 @@ class IndependentVerifier:
                 missing.append(f"Invalid evidence reference: {ref}")
         for record in evidence:
             facts = record.result
+            if facts.get("resolved_by") and self.resolution_is_valid(record):
+                continue
             if facts.get("superseded") and record.evidence_type == EvidenceType.TEST_PASS:
+                continue
+            if "project_snapshot" in facts and facts.get("success") is True and (
+                    facts["project_snapshot"] is None or facts["project_snapshot"] != project_snapshot(self.project_root)):
+                facts["stale"] = True
+                missing.append(f"Changed project since execution: {record.evidence_id}")
                 continue
             if (record.evidence_type == EvidenceType.TEST_FAIL
                     or record.strength == EvidenceStrength.CONTRADICTORY

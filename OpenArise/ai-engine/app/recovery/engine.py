@@ -183,3 +183,93 @@ class RecoveryEngine:
             else:
                 result.status = RecoveryState.FAILED
                 result.final_result += " (Rollback failed)"
+
+    def prepare_recovery(self, failure, diagnosis, attempts, repeated_count):
+        """Retain one real plan; approvals target exact registered action IDs."""
+        import uuid
+        from app.models.schemas import ToolCall
+        result = RecoveryResult(recovery_id="rec_" + uuid.uuid4().hex,
+                                failure_id=failure.failure_id, status=RecoveryState.PLANNING,
+                                attempts=attempts, failure_signature_before=failure.error_signature or "",
+                                final_result="Recovery planning started.")
+        session = {"result": result, "failure": failure, "calls": [], "index": 0,
+                   "checkpointed": False, "records": [], "done": False}
+        if not self.policy.can_retry_failure(failure.error_signature or "", attempts, repeated_count):
+            result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Recovery policy limit reached.", True
+            return session
+        plan = self.planner.plan(failure, diagnosis)
+        if not plan:
+            result.status, result.final_result, session["done"] = RecoveryState.FAILED, "Recovery plan unavailable.", True
+            return session
+        if not plan.proposed_actions or len(plan.proposed_actions) > self.policy.policy.max_actions_per_cycle:
+            result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Recovery action count is invalid.", True
+            return session
+        if failure.category in (FailureCategory.IMPORT_ERROR, FailureCategory.DEPENDENCY_ERROR):
+            result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Automatic dependency installation is disabled.", True
+            return session
+        try:
+            for call in plan.proposed_actions:
+                self.tool_registry.get_tool(call.tool_name)
+            self.tool_registry.get_tool("execute_tests")
+        except KeyError:
+            result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Recovery tool unavailable.", True
+            return session
+        calls = [call.model_copy(deep=True) for call in plan.proposed_actions]
+        for index, call in enumerate(calls):
+            call.tool_call_id = result.recovery_id + "_" + str(index)
+        calls.append(ToolCall(tool_name="execute_tests", tool_call_id=result.recovery_id + "_retest"))
+        session["calls"] = calls
+        session["plan"] = plan
+        return session
+
+    def advance_recovery(self, session, record, state):
+        """Execute approved actions once; return the next exact approval request."""
+        import time
+        from app.tools.permissions import PermissionAction
+        result = session["result"]
+        while not session["done"] and session["index"] < len(session["calls"]):
+            call = session["calls"][session["index"]]
+            tool = self.tool_registry.get_tool(call.tool_name)
+            if not self.permission_manager.check_permission(call.tool_call_id, tool.risk_level):
+                if self.permission_manager.get_action_for_risk(tool.risk_level) == PermissionAction.DENY:
+                    result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Recovery action denied by permission policy.", True
+                    break
+                result.status = RecoveryState.PERMISSION_REQUIRED
+                result.final_result = "Recovery retest requires approval." if call.tool_name == "execute_tests" else "Recovery action requires approval."
+                return call
+            if not session["checkpointed"]:
+                paths = [c.arguments.get("path") for c in session["calls"] if c.tool_name == "write_file"]
+                if paths:
+                    result.rollback_checkpoint = self.checkpoint_manager.create_checkpoint([p for p in paths if p])
+                session["checkpointed"] = True
+            retest = session["index"] == len(session["calls"]) - 1
+            result.status = RecoveryState.RETESTING if retest else RecoveryState.APPLYING
+            state("RETESTING" if retest else "RECOVERING", call.tool_call_id, True)
+            started = time.monotonic()
+            try:
+                output = tool.execute(**call.arguments)
+                exit_code = output.get("exit_code") if isinstance(output, dict) else None
+                success = exit_code in (None, 0) and not (isinstance(output, dict) and (output.get("error") or output.get("success") is False))
+                item = ToolResult(tool_name=call.tool_name, tool_call_id=call.tool_call_id, output=output,
+                                  exit_code=exit_code, success=success, error=None if success else "Recovery execution failed.",
+                                  duration=time.monotonic()-started, metadata={"executed": True})
+            except Exception as exc:
+                item = ToolResult(tool_name=call.tool_name, tool_call_id=call.tool_call_id, success=False,
+                                  error=str(exc), duration=time.monotonic()-started, metadata={"executed": True})
+            finally:
+                self.permission_manager.revoke_approval(call.tool_call_id)
+            session["records"].append(item)
+            record(call, tool, item)
+            session["index"] += 1
+            result.actions_executed.append(call.tool_name)
+            if call.tool_name == "execute_tests":
+                result.tests_run.append(call.tool_call_id)
+            if not item.success:
+                result.status, result.final_result = RecoveryState.FAILED, "Recovery retest failed." if retest else "Recovery action failed."
+                self._rollback(result)
+                session["done"] = True
+                break
+            if retest:
+                result.status, result.final_result, session["done"] = RecoveryState.RECOVERED, "Recovery retest passed. CompletionGate still determines completion.", True
+                result.evidence = {"retest_tool_call_id": call.tool_call_id, "exit_code": item.exit_code}
+        return None
