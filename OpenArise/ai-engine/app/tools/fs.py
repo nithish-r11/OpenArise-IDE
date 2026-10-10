@@ -98,13 +98,34 @@ class WriteFileTool(BaseTool):
             raise ValueError("Content too large.")
             
         full_path = os.path.join(self.project_root, path)
-        if os.path.exists(full_path) and not overwrite:
-            raise FileExistsError(f"File '{path}' already exists. Use overwrite=True to replace.")
-            
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
-        
-        with open(full_path, "w", encoding="utf-8") as f:
-            f.write(content)
+        if not overwrite:
+            # Exclusive creation prevents a competing creator being overwritten.
+            with open(full_path, "x", encoding="utf-8", newline="") as f:
+                f.write(content)
+        else:
+            import tempfile
+            import stat
+            from pathlib import Path
+            target = Path(full_path)
+            mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else None
+            temporary = None
+            try:
+                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="", dir=target.parent,
+                                                 prefix=".openarise-save-", suffix=".tmp", delete=False) as f:
+                    temporary = f.name
+                    f.write(content)
+                    f.flush()
+                    os.fsync(f.fileno())
+                if mode is not None:
+                    os.chmod(temporary, mode)
+                if not _is_safe_path(self.project_root, path):
+                    raise ValueError("The file path changed during save.")
+                os.replace(temporary, full_path)
+                temporary = None
+            finally:
+                if temporary is not None:
+                    os.unlink(temporary)
             
         return {"path": path, "status": "written", "bytes": len(content)}
 

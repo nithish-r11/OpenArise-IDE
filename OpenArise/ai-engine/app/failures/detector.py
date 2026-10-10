@@ -28,6 +28,10 @@ class FailureDetector:
         
         # 1. Deterministic classification
         category = self._classify_text(full_text)
+        if tool_result.tool_name == "execute_project_tests" and tool_result.exit_code not in (None, 0) and category == FailureCategory.UNKNOWN:
+            category = FailureCategory.TEST_FAILURE
+        if tool_result.tool_name == "build_project" and tool_result.exit_code not in (None, 0) and category == FailureCategory.UNKNOWN:
+            category = FailureCategory.CONFIGURATION_ERROR
         
         if error_msg == "permission_required":
             category = FailureCategory.PERMISSION_ERROR

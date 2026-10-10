@@ -8,8 +8,8 @@ export interface TerminalSession {
   truncated: boolean; problem: string; testResult: 'running' | 'passed' | 'failed' | null;
 }
 export interface TerminalRequest {
-  projectId: string; operation: 'snapshot' | 'refresh' | 'create' | 'execute' | 'stop' | 'clear' | 'close' | 'restart';
-  sessionId?: string; command?: string; revision?: string;
+  projectId: string; operation: 'snapshot' | 'refresh' | 'create' | 'execute' | 'executeCapability' | 'stop' | 'clear' | 'close' | 'restart';
+  sessionId?: string; command?: string; revision?: string; capabilityId?: string;
 }
 export interface TerminalSnapshot { environment: PythonEnvironment; sessions: TerminalSession[] }
 export interface TerminalBridge { request(request: TerminalRequest): Promise<Result<TerminalSnapshot>> }

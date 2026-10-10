@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import App from '../src/App';
 import { AppShell } from '../src/components/AppShell';
 import { sections } from '../src/components/Sidebar';
 import type { ProjectBridge, Result, FileBuffer } from '../src/types/project';
+import { useWorkspace } from '../src/workspace/useWorkspace';
 vi.mock('../src/editor/MonacoEditor', () => ({
   default: ({ tabs, active, onChange }: any) => {
     const tab = tabs.find((t: any) => t.path === active);
@@ -23,6 +24,13 @@ beforeEach(() => {
     saveFile: vi.fn(async request => ({ ok: true, data: { ...buffer(request.path), content: request.content, revision: 'b'.repeat(64) } })),
     observeProject: vi.fn(async () => ({ ok: true, data: { files: 2, modules: 1, observedAt: '2026-09-26' } })),
     setDirty: vi.fn(async () => {}),
+    createFile: vi.fn(async ({ path }) => ({ ok: true, data: { ...buffer(path), content: '', readOnly: false } })),
+    createFolder: vi.fn(async ({ path }) => ({ ok: true, data: { path, kind: 'folder' } })),
+    inspectRename: vi.fn(async ({ path }) => ({ ok: true, data: { path, kind: 'file', revision: 'a'.repeat(64) } })),
+    renamePath: vi.fn(async ({ destination }) => ({ ok: true, data: { path: destination, kind: 'file' } })),
+    searchFiles: vi.fn(async () => ({ ok: true, data: [] })),
+    recentProjects: vi.fn(async () => ({ ok: true, data: [] })),
+    openRecent: vi.fn(async () => ({ ok: true, data: project })),
   };
   window.openarise = { project: bridge, getStatus: async () => ({ status: 'disconnected', reason: 'transport_not_implemented' }) } as any;
 });
@@ -89,6 +97,33 @@ describe('Phase 2 workspace', () => {
     expect(await screen.findByText('File changed on disk.')).toBeTruthy();
     expect((editor as HTMLTextAreaElement).value).toBe('keep my text');
   });
+  it('acknowledges a real save whose returned Windows line endings are normalized', async () => {
+    bridge.saveFile = vi.fn(async request => ({ ok: true, data: { ...buffer(request.path), content: request.content.replaceAll('\r\n', '\n'), revision: 'b'.repeat(64) } }));
+    const { result } = renderHook(() => useWorkspace(bridge));
+    await act(async () => { await result.current.openProject(); });
+    await act(async () => { await result.current.openFile('config.json'); });
+    act(() => result.current.change('config.json', '{"label":"actual"}\r\n'));
+    await act(async () => { await result.current.save('config.json'); });
+    expect(bridge.saveFile).toHaveBeenCalledWith({ projectId: project.id, path: 'config.json', content: '{"label":"actual"}\r\n', revision: 'a'.repeat(64) });
+    expect(result.current.tabs[0].content).toBe('{"label":"actual"}\n');
+    expect(result.current.dirty).toBe(false);
+    expect(result.current.tabs[0].revision).toBe('b'.repeat(64));
+  });
+  it('preserves newer edits when a pending save returns normalized line endings', async () => {
+    let resolve!: (r: Result<FileBuffer>) => void;
+    bridge.saveFile = vi.fn(() => new Promise(r => { resolve = r; }));
+    const { result } = renderHook(() => useWorkspace(bridge));
+    await act(async () => { await result.current.openProject(); });
+    await act(async () => { await result.current.openFile('config.json'); });
+    act(() => result.current.change('config.json', '{"label":"first"}\r\n'));
+    let saving!: Promise<void>;
+    act(() => { saving = result.current.save('config.json'); });
+    act(() => result.current.change('config.json', '{"label":"newer"}\r\n'));
+    await act(async () => { resolve({ ok: true, data: { ...buffer('config.json'), content: '{"label":"first"}\n', revision: 'b'.repeat(64) } }); await saving; });
+    expect(result.current.tabs[0].content).toBe('{"label":"newer"}\r\n');
+    expect(result.current.tabs[0].savedContent).toBe('{"label":"first"}\n');
+    expect(result.current.dirty).toBe(true);
+  });
   it('requires a discard choice before closing dirty tabs', async () => {
     render(<App />);
     fireEvent.change(await openFile(), { target: { value: 'unsaved' } });
@@ -116,6 +151,43 @@ describe('Phase 2 workspace', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open Project' }));
     expect(await screen.findByText('Save or close unsaved tabs before opening another project.')).toBeTruthy();
     expect(bridge.openProject).toHaveBeenCalledTimes(1);
+  });
+  it('reloads current disk contents only after an explicit discard decision', async () => {
+    render(<App />);
+    fireEvent.change(await openFile(), { target: { value: 'unsaved edits' } });
+    bridge.readFile = vi.fn(async ({ path }) => ({ ok: true, data: { ...buffer(path), content: 'actual disk contents', revision: 'b'.repeat(64) } }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    expect(bridge.readFile).not.toHaveBeenCalled();
+    expect((screen.getByRole('textbox', { name: 'Code editor' }) as HTMLTextAreaElement).value).toBe('unsaved edits');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard and reload' }));
+    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Code editor' }) as HTMLTextAreaElement).value).toBe('actual disk contents'));
+    expect(screen.queryByLabelText('Unsaved changes')).toBeNull();
+  });
+  it('locks duplicate file creation and opens the actual empty returned buffer', async () => {
+    let resolve!: (result: Result<FileBuffer>) => void;
+    bridge.createFile = vi.fn(() => new Promise(r => { resolve = r; }));
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open Project' }));
+    await screen.findByRole('button', { name: /app$/ });
+    await waitFor(() => expect((screen.getByRole('button', { name: 'New file' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'New file' }));
+    fireEvent.change(screen.getByLabelText('New file in this project'), { target: { value: 'app/new.tsx' } });
+    const create = screen.getByRole('button', { name: 'Create file' });
+    fireEvent.click(create); fireEvent.click(create);
+    expect(bridge.createFile).toHaveBeenCalledTimes(1);
+    resolve({ ok: true, data: { path: 'app/new.tsx', content: '', revision: 'a'.repeat(64), readOnly: false } });
+    await screen.findByRole('tab', { name: 'new.tsx' });
+    expect((screen.getByRole('textbox', { name: 'Code editor' }) as HTMLTextAreaElement).value).toBe('');
+  });
+  it('opens a session recent project by retained ID, never by a renderer path', async () => {
+    bridge.recentProjects = vi.fn(async () => ({ ok: true, data: [project] }));
+    render(<App />);
+    fireEvent.click(await screen.findByText('Recent projects · this session'));
+    fireEvent.click(screen.getByRole('button', { name: 'demo' }));
+    await waitFor(() => expect(bridge.openRecent).toHaveBeenCalledWith(project.id));
+    expect(bridge.openProject).not.toHaveBeenCalled();
   });
   it('shows an empty project honestly', async () => {
     bridge.listDirectory = vi.fn(async () => ({ ok: true, data: [] }));

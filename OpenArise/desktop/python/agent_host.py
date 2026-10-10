@@ -19,6 +19,7 @@ from app.memory.redact import SecretRedactor
 from app.tools.base import ToolRegistry
 from app.tools.fs import ReadFileTool, WriteFileTool
 from app.tools.execution import PythonExecutionTool, TestExecutionTool
+from app.tools.project_commands import ProjectCommandTool, ProjectBuildTool
 from app.tools.permissions import PermissionManager
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_projection import project_response
@@ -44,7 +45,7 @@ def build_provider():
 
 def build_agent(root, provider=None):
     registry = ToolRegistry()
-    for tool in (ReadFileTool, WriteFileTool, PythonExecutionTool, TestExecutionTool):
+    for tool in (ReadFileTool, WriteFileTool, PythonExecutionTool, TestExecutionTool, ProjectCommandTool, ProjectBuildTool):
         registry.register(tool(root))
     orchestrator = AgentOrchestrator(provider if provider is not None else build_provider(), tool_registry=registry,
                                     permission_manager=PermissionManager(test_mode=False),

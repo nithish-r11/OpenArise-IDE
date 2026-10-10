@@ -93,7 +93,7 @@ const fileResult = await run(['-I', '-B', '-u', path.join(resources, 'desktop/py
 const fileResponses = fileResult.stdout.trim().split(/\r?\n/).map(line => JSON.parse(line));
 assert.equal(fileResponses.length, fileRequests.length);
 assert.ok(fileResponses.every(r => r.ok), 'Bundled file host rejected an operation');
-assert.equal(await readFile(path.join(project, 'main.py'), 'utf8'), saved.replaceAll('\n', '\r\n')); // Existing Windows writer uses CRLF.
+assert.deepEqual(await readFile(path.join(project, 'main.py')), Buffer.from(saved, 'utf8')); // The writer preserves the submitted UTF-8 bytes and line endings.
 assert.equal(fileResponses.find(r => r.id === 'environment').data.executable.toLowerCase(), python.toLowerCase());
 const requests = ['get_project_information', 'get_environment_status', 'shutdown'].map((method, i) => ({ request_id: 'package-' + i, method, params: {} }));
 const backend = await run(['-I', '-B', '-u', path.join(resources, 'desktop/python/agent_host.py'), project], requests.map(r => JSON.stringify(r)).join('\n') + '\n');

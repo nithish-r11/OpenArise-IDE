@@ -17,6 +17,8 @@ export function validTerminalRequest(value: unknown): value is TerminalRequest {
   if (!validId(r.projectId)) return false;
   if (r.operation === 'snapshot' || r.operation === 'refresh' || r.operation === 'create') return Object.keys(r).sort().join() === 'operation,projectId';
   if (!validId(r.sessionId)) return false;
+  if (r.operation === 'executeCapability') return Object.keys(r).sort().join() === 'capabilityId,operation,projectId,sessionId'
+    && typeof r.capabilityId === 'string' && /^[a-f0-9]{24}$/.test(r.capabilityId);
   if (r.operation === 'execute') {
     const cmd = parseCommand(r.command);
     if (!cmd) return false;

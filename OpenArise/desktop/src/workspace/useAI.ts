@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { BackendClient } from '../backend/client';
 import type { Project } from '../types/project';
-import type { AIHistoryItem, AIRequest, AIResult } from '../types/ai';
+import type { AIHistoryItem, AIPending, AIRequest, AIResult } from '../types/ai';
 import type { ClientResult, JsonObject } from '../types/backend';
 import { validAgentEnvelope } from '../../shared/agent-response';
 export function useAI(project?: Project, answerOnly = false) {
@@ -25,16 +25,17 @@ export function useAI(project?: Project, answerOnly = false) {
   const patch = (requestId: string, update: Partial<AIHistoryItem>) => setItems(old => old.map(i => i.request.requestId === requestId ? { ...i, ...update } : i));
   useEffect(() => { setContext(null); setEnvironment(null); setContextState('not_loaded'); setContextError(''); setError(''); setSelected(''); }, [project?.id]);
   const readError = (result: ClientResult, fallback: string) => result.kind === 'unavailable' ? result.message
-    : !result.response.success ? result.response.error.message + ' (' + result.response.error.code + ')' : fallback;
-  const loadContext = async () => {
+    : !result.response.success ? result.response.error.message : fallback;
+  const loadContext = async (rescan = false) => {
     if (!project || lock.current) return;
     lock.current = true; setBusy(true); setContextState('loading'); setContextError('');
     const id = project.id;
     try {
-      const result = await client.getIntelligence();
+      const method = rescan ? 'refresh_workspace' : 'get_intelligence_snapshot';
+      const result = await (rescan ? client.refreshWorkspace() : client.getIntelligence());
       const env = await client.getEnvironment();
       if (projectRef.current !== id) return;
-      if (result.kind === 'backend' && result.response.success && validAgentEnvelope(result.response, result.response.request_id, 'get_intelligence_snapshot')) {
+      if (result.kind === 'backend' && result.response.success && validAgentEnvelope(result.response, result.response.request_id, method)) {
         const data = result.response.data as JsonObject;
         setContext(data);
         const summary = data.intelligence_summary;
@@ -51,16 +52,26 @@ export function useAI(project?: Project, answerOnly = false) {
       if (projectRef.current === id) { setContextState('unavailable'); setContextError('Project context could not load. Reopen the project and check backend diagnostics.'); }
     } finally { lock.current = false; setBusy(false); }
   };
-  const adopt = (requestId: string, result: ClientResult, method: string, commandId: string): AIResult | undefined => {
+  const adopt = (requestId: string, result: ClientResult, method: string, commandId: string, approvedAction?: AIPending): AIResult | undefined => {
     if (result.kind !== 'backend' || !validAgentEnvelope(result.response, commandId, method) || !result.response.success) {
       const message = result.kind === 'unavailable' ? result.message : result.kind === 'backend' && !result.response.success
-        ? result.response.error.message + ' (' + result.response.error.code + ')'  : 'Invalid backend response.';
+        ? result.response.error.message : 'OpenArise received an invalid response. Refresh the request or reopen the project.';
       patch(requestId, { state: 'backend unavailable', error: message }); setError(message); return;
     }
     const agent = result.response.data as unknown as AIResult;
     if (agent.request_id !== requestId) {
       const message = 'Response request ID did not match.';
       patch(requestId, { state: 'backend unavailable', error: message }); setError(message); return;
+    }
+    if (approvedAction && agent.status === 'approved') {
+      const approved = agent.pending_action;
+      if (!approved?.approved || approved.request_id !== approvedAction.request_id
+        || approved.tool_call_id !== approvedAction.tool_call_id || approved.tool_name !== approvedAction.tool_name
+        || approved.risk_level !== approvedAction.risk_level || approved.resource !== approvedAction.resource
+        || JSON.stringify(approved.command ?? null) !== JSON.stringify(approvedAction.command ?? null)) {
+        const message = 'Approval did not match the reviewed action. Execution was not resumed.';
+        patch(requestId, { state: 'backend unavailable', error: message }); setError(message); return;
+      }
     }
     patch(requestId, { result: agent, events: result.response.events, state: agent.status, error: undefined,
       source: result.source === 'backend' || result.source === 'test_fixture' ? result.source : 'unknown',
@@ -99,7 +110,7 @@ export function useAI(project?: Project, answerOnly = false) {
       const id = crypto.randomUUID();
       const response = kind === 'cancel' ? await client.cancelAgentRequest(target, id) : await client.agentCommand(method as 'approve_agent_action' | 'resume_agent_execution' | 'deny_agent_action', target, action!.tool_call_id, id);
       if (projectRef.current !== projectId) return;
-      const agent = adopt(target, response, method, id);
+      const agent = adopt(target, response, method, id, method === 'approve_agent_action' ? action! : undefined);
       if (kind === 'allow' && method === 'approve_agent_action' && agent?.status === 'approved' && agent.pending_action?.approved) {
         setCommandInFlight({ requestId: target, kind, stage: 'resume' });
         const resumeId = crypto.randomUUID();

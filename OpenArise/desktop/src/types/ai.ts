@@ -1,6 +1,6 @@
 import type { BackendEvent, JsonObject } from './backend';
 export interface AIRequest { requestId: string; prompt: string; context?: JsonObject; projectRef?: { id: string } }
-export interface AIPending { request_id: string; tool_call_id: string; risk_level: 'READ' | 'WRITE' | 'EXECUTE'; approved: boolean; tool_name: string; resource: string | null }
+export interface AIPending { request_id: string; tool_call_id: string; risk_level: 'READ' | 'WRITE' | 'EXECUTE'; approved: boolean; tool_name: string; resource: string | null; command?: { label: string; script: string; revision: string } }
 export interface AITool { resolved_by?: string; tool_name: string; tool_call_id: string | null; success: boolean; executed: boolean; exit_code: number | null; timestamp: string }
 export type VerificationStatus = 'VERIFIED' | 'PARTIALLY_VERIFIED' | 'NOT_VERIFIED' | 'INCONCLUSIVE' | 'PENDING';
 export type DataSource = 'backend' | 'test_fixture' | 'unknown';

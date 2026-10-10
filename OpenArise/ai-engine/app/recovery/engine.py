@@ -13,6 +13,23 @@ from app.failures.detector import FailureDetector
 
 logger = logging.getLogger(__name__)
 
+def modifies_test_file(plan):
+    """Recovery repairs implementations; direct test rewrites cannot become proof."""
+    from pathlib import PurePosixPath
+    for call in plan.proposed_actions:
+        if call.tool_name not in ("write_file", "edit_file"):
+            continue
+        relative = call.arguments.get("path")
+        if not isinstance(relative, str):
+            continue  # The registered tool still validates malformed arguments.
+        path = PurePosixPath(relative.replace("\\", "/").lower())
+        name = path.name
+        if (any(part in ("test", "tests", "__tests__", "fixtures") for part in path.parts)
+                or name in ("conftest.py", "pytest.ini") or name.startswith("test_")
+                or name.endswith("_test.py") or ".test." in name or ".spec." in name):
+            return True
+    return False
+
 class RecoveryEngine:
     """Orchestrates the autonomous recovery process safely."""
     
@@ -48,6 +65,11 @@ class RecoveryEngine:
             result.status = RecoveryState.FAILED
             result.final_result = "Failed to create recovery plan."
             return result
+
+        if modifies_test_file(plan):
+            result.status = RecoveryState.BLOCKED
+            result.final_result = "Recovery cannot modify test files. Original checks must remain unchanged."
+            return result
             
         call_ids = [action.tool_call_id for action in plan.proposed_actions]
         if len(call_ids) != len(set(call_ids)) or any(not value for value in call_ids):
@@ -57,6 +79,11 @@ class RecoveryEngine:
         if len(plan.proposed_actions) > self.policy.policy.max_actions_per_cycle:
             result.status = RecoveryState.BLOCKED
             result.final_result = "Recovery action limit exceeded."
+            return result
+
+        if failure.category in (FailureCategory.IMPORT_ERROR, FailureCategory.DEPENDENCY_ERROR):
+            result.status = RecoveryState.BLOCKED
+            result.final_result = "Permission blocked: automatic dependency installation is disabled."
             return result
 
         # Recovery never inherits approval merely from a model's declared risk.
@@ -72,14 +99,10 @@ class RecoveryEngine:
                 result.status = RecoveryState.BLOCKED
                 result.final_result = "Recovery tool is unavailable."
                 return result
-            if not self.permission_manager.check_permission(action.tool_call_id, tool.risk_level):
+            if not self.permission_manager.check_call_permission(plan.recovery_id, action, tool.risk_level):
                 result.status = RecoveryState.BLOCKED
                 result.final_result = "Permission required for the exact recovery tool call."
                 return result
-        if failure.category in (FailureCategory.IMPORT_ERROR, FailureCategory.DEPENDENCY_ERROR):
-            result.status = RecoveryState.BLOCKED
-            result.final_result = "Automatic dependency installation is disabled."
-            return result
         try:
             test_tool = self.tool_registry.get_tool("execute_tests")
         except KeyError:
@@ -87,7 +110,9 @@ class RecoveryEngine:
             result.final_result = "Recovery validation tool is unavailable."
             return result
         retest_id = plan.recovery_id + ":retest"
-        if not self.permission_manager.check_permission(retest_id, test_tool.risk_level):
+        from app.models.schemas import ToolCall
+        retest_call = ToolCall(tool_name="execute_tests", tool_call_id=retest_id)
+        if not self.permission_manager.check_call_permission(plan.recovery_id, retest_call, test_tool.risk_level):
             result.status = RecoveryState.BLOCKED
             result.final_result = "Permission required for recovery validation."
             return result
@@ -108,7 +133,7 @@ class RecoveryEngine:
         for action in plan.proposed_actions:
             try:
                 tool = self.tool_registry.get_tool(action.tool_name)
-                if not self.permission_manager.check_permission(action.tool_call_id, tool.risk_level):
+                if not self.permission_manager.consume_call_permission(plan.recovery_id, action, tool.risk_level):
                     result.status = RecoveryState.BLOCKED
                     result.final_result = "Recovery tool permission was revoked."
                     self._rollback(result)
@@ -135,7 +160,7 @@ class RecoveryEngine:
         # For simplicity in MVP, if there's a test tool, run it. Otherwise assume failure tool.
         # Ideally, run the same tool that failed.
         try:
-            if not self.permission_manager.check_permission(retest_id, test_tool.risk_level):
+            if not self.permission_manager.consume_call_permission(plan.recovery_id, retest_call, test_tool.risk_level):
                 result.status = RecoveryState.BLOCKED
                 result.final_result = "Recovery validation permission was revoked."
                 self._rollback(result)
@@ -184,7 +209,7 @@ class RecoveryEngine:
                 result.status = RecoveryState.FAILED
                 result.final_result += " (Rollback failed)"
 
-    def prepare_recovery(self, failure, diagnosis, attempts, repeated_count):
+    def prepare_recovery(self, failure, diagnosis, attempts, repeated_count, retest_call=None):
         """Retain one real plan; approvals target exact registered action IDs."""
         import uuid
         from app.models.schemas import ToolCall
@@ -193,13 +218,16 @@ class RecoveryEngine:
                                 attempts=attempts, failure_signature_before=failure.error_signature or "",
                                 final_result="Recovery planning started.")
         session = {"result": result, "failure": failure, "calls": [], "index": 0,
-                   "checkpointed": False, "records": [], "done": False}
+                   "checkpointed": False, "records": [], "done": False, "request_id": result.recovery_id}
         if not self.policy.can_retry_failure(failure.error_signature or "", attempts, repeated_count):
             result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Recovery policy limit reached.", True
             return session
         plan = self.planner.plan(failure, diagnosis)
         if not plan:
             result.status, result.final_result, session["done"] = RecoveryState.FAILED, "Recovery plan unavailable.", True
+            return session
+        if modifies_test_file(plan):
+            result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Recovery cannot modify test files. Original checks must remain unchanged.", True
             return session
         if not plan.proposed_actions or len(plan.proposed_actions) > self.policy.policy.max_actions_per_cycle:
             result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Recovery action count is invalid.", True
@@ -210,19 +238,21 @@ class RecoveryEngine:
         try:
             for call in plan.proposed_actions:
                 self.tool_registry.get_tool(call.tool_name)
-            self.tool_registry.get_tool("execute_tests")
+            self.tool_registry.get_tool(retest_call.tool_name if retest_call else "execute_tests")
         except KeyError:
             result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Recovery tool unavailable.", True
             return session
         calls = [call.model_copy(deep=True) for call in plan.proposed_actions]
         for index, call in enumerate(calls):
             call.tool_call_id = result.recovery_id + "_" + str(index)
-        calls.append(ToolCall(tool_name="execute_tests", tool_call_id=result.recovery_id + "_retest"))
+        calls.append(ToolCall(tool_name=retest_call.tool_name if retest_call else "execute_tests",
+                              arguments=dict(retest_call.arguments) if retest_call else {},
+                              tool_call_id=result.recovery_id + "_retest"))
         session["calls"] = calls
         session["plan"] = plan
         return session
 
-    def advance_recovery(self, session, record, state):
+    def advance_recovery(self, session, record, state, pending_decision=None):
         """Execute approved actions once; return the next exact approval request."""
         import time
         from app.tools.permissions import PermissionAction
@@ -230,12 +260,12 @@ class RecoveryEngine:
         while not session["done"] and session["index"] < len(session["calls"]):
             call = session["calls"][session["index"]]
             tool = self.tool_registry.get_tool(call.tool_name)
-            if not self.permission_manager.check_permission(call.tool_call_id, tool.risk_level):
+            if (pending_decision is not None and not pending_decision(call, tool)) or not self.permission_manager.check_call_permission(session["request_id"], call, tool.risk_level):
                 if self.permission_manager.get_action_for_risk(tool.risk_level) == PermissionAction.DENY:
                     result.status, result.final_result, session["done"] = RecoveryState.BLOCKED, "Recovery action denied by permission policy.", True
                     break
                 result.status = RecoveryState.PERMISSION_REQUIRED
-                result.final_result = "Recovery retest requires approval." if call.tool_name == "execute_tests" else "Recovery action requires approval."
+                result.final_result = "Recovery validation requires approval." if session["index"] == len(session["calls"]) - 1 else "Recovery action requires approval."
                 return call
             if not session["checkpointed"]:
                 paths = [c.arguments.get("path") for c in session["calls"] if c.tool_name == "write_file"]
@@ -246,6 +276,10 @@ class RecoveryEngine:
             result.status = RecoveryState.RETESTING if retest else RecoveryState.APPLYING
             state("RETESTING" if retest else "RECOVERING", call.tool_call_id, True)
             started = time.monotonic()
+            if (pending_decision is not None and not pending_decision(call, tool)) or not self.permission_manager.consume_call_permission(session["request_id"], call, tool.risk_level):
+                result.status, result.final_result = RecoveryState.PERMISSION_REQUIRED, "Recovery approval expired before execution."
+                self.permission_manager.revoke_approval(call.tool_call_id)
+                return call
             try:
                 output = tool.execute(**call.arguments)
                 exit_code = output.get("exit_code") if isinstance(output, dict) else None
@@ -262,7 +296,7 @@ class RecoveryEngine:
             record(call, tool, item)
             session["index"] += 1
             result.actions_executed.append(call.tool_name)
-            if call.tool_name == "execute_tests":
+            if call.tool_name in ("execute_tests", "execute_project_tests"):
                 result.tests_run.append(call.tool_call_id)
             if not item.success:
                 result.status, result.final_result = RecoveryState.FAILED, "Recovery retest failed." if retest else "Recovery action failed."

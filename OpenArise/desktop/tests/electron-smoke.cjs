@@ -21,6 +21,7 @@ const source = [
 ].join('\n');
 fs.writeFileSync(path.join(project, 'app/main.py'), source);
 fs.writeFileSync(path.join(project, 'README.md'), '# Smoke project\nRead-only text preview.');
+fs.writeFileSync(path.join(project, 'config.json'), '{"label":"ACTUAL_JSON_SOURCE"}');
 fs.writeFileSync(path.join(project, '.env'), 'PRIVATE_TEST_VALUE=hidden');
 fs.writeFileSync(path.join(project, 'test_sample.py'), 'def test_ready():\n    assert True\n');
 fs.writeFileSync(path.join(project, 'long.py'), 'import os,time\nprint("PID="+str(os.getpid()), flush=True)\ntime.sleep(60)\n');
@@ -58,7 +59,7 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(preferences.nodeIntegration, false);
       assert.deepEqual(await js('Object.keys(window.openarise.terminal)'), ['request']);
       assert.deepEqual(await js('Object.keys(window.openarise.project).sort()'),
-        ['listDirectory', 'observeProject', 'openProject', 'readFile', 'saveFile', 'setDirty']);
+        ['createFile', 'createFolder', 'inspectRename', 'listDirectory', 'observeProject', 'openProject', 'openRecent', 'readFile', 'recentProjects', 'renamePath', 'saveFile', 'searchFiles', 'setDirty']);
       await js('document.querySelector(".open-project").click()');
       await until('!document.querySelector(".open-project").disabled', 'cancel picker');
       assert.equal(await js('document.querySelectorAll("[role=tab]").length'), 0);
@@ -84,6 +85,26 @@ app.once('browser-window-created', (_event, window) => {
       await js('[...document.querySelectorAll(".tree-file")].find(b=>b.textContent.includes("README.md")).click()');
       await until('document.querySelectorAll("[role=tab]").length === 2', 'multiple tabs');
       assert.equal(await js('document.querySelector(".save-button").disabled'), true);
+      await js('[...document.querySelectorAll(".tree-file")].find(b=>b.textContent.includes("config.json")).click()');
+      await until('document.querySelector(".breadcrumb")?.textContent.includes("config.json") && document.querySelector(".view-lines")?.textContent.includes("ACTUAL_JSON_SOURCE")', 'real JSON model and local language feature');
+      assert.equal(await js('document.querySelectorAll("[role=tab]").length'), 3);
+      await js('document.querySelector(".monaco-editor textarea").focus()');
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'End', modifiers: ['control'] });
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'End', modifiers: ['control'] });
+      await window.webContents.insertText('\n');
+      await until('document.querySelector(".save-label")?.textContent === "Unsaved changes" && !!document.querySelector(".tab-active .dirty-dot") && !document.querySelector(".save-button").disabled', 'JSON edit reached workspace state and can save');
+      await js('document.querySelector(".save-button").click()');
+      await until('document.querySelector(".save-label")?.textContent === "Saved"', 'actual JSON safe save');
+      assert.equal(JSON.parse(fs.readFileSync(path.join(project, 'config.json'), 'utf8')).label, 'ACTUAL_JSON_SOURCE');
+      assert.ok(fs.readFileSync(path.join(project, 'config.json'), 'utf8').endsWith('\n'), 'Native JSON edit was persisted');
+      // A first save of a single-line Windows model must preserve editor undo.
+      await js('document.querySelector(".monaco-editor textarea").focus()');
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Z', modifiers: ['control'] });
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Z', modifiers: ['control'] });
+      await until('document.querySelector(".save-label")?.textContent === "Unsaved changes"', 'JSON undo remains available after save');
+      window.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'Y', modifiers: ['control'] });
+      window.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'Y', modifiers: ['control'] });
+      await until('document.querySelector(".save-label")?.textContent === "Saved"', 'JSON redo restores the confirmed buffer');
       await js('[...document.querySelectorAll("[role=tab]")].find(b=>b.textContent.includes("main.py")).click()');
       await until('document.querySelector(".breadcrumb")?.textContent.includes("main.py")', 'active tab');
       await until('!document.querySelector(".run-python").disabled', 'Python environment ready');
@@ -111,7 +132,7 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(await js('document.querySelector(".ai-submit").disabled'), true);
       fs.writeFileSync(path.join(profile, 'ai-permission.png'), (await window.webContents.capturePage()).toPNG());
       await js('[...document.querySelectorAll(".ai-permission button")].find(b=>b.textContent==="Allow").click()');
-      await until('document.querySelector(".ai-result>strong")?.textContent==="Unverified"', 'AI unverified outcome');
+      await until('document.querySelector(".ai-result>strong")?.textContent==="Not verified"', 'AI inconclusive outcome remains not verified');
       assert.equal(await js('document.querySelector(".ai-result").textContent.includes("Verified by CompletionGate")'), false);
       assert.equal(await js('document.querySelector(".arise-activity").dataset.state'), 'unverified');
       const activitySubmit = async (prompt, state) => {
@@ -142,13 +163,16 @@ app.once('browser-window-created', (_event, window) => {
       assert.equal(require('node:crypto').createHash('sha256').update(fs.readFileSync(path.join(__dirname, '../src/assets/openarise-logo.jpeg'))).digest('hex'), '7170a7b5a083b27fa852082e8ae42db47419f52376aefc1a281748eb2b6486e3');
       assert.match(await js('document.querySelector(".ai-activity").textContent'), /Returned observations, not live progress/);
       await js('[...document.querySelectorAll(".ai-context button")].find(b=>b.textContent==="Refresh context").click()');
-      await until('document.querySelector(".ai-context").textContent.includes("4 files")', 'AI context summary');
+      // The AI summary below is the explicitly labelled intelligence fixture,
+      // independent of the real file-host project edited above.
+      await until('document.querySelector(".ai-context").textContent.includes("4 files")', 'fixture AI context summary');
       for (const [width, height] of [[1440, 900], [1050, 740], [760, 540]]) {
         window.setSize(width, height); await delay(500);
         const layout = await js('({overflow:document.documentElement.scrollWidth>innerWidth,editor:document.querySelector(".editor-container").getBoundingClientRect().width})');
         assert.equal(layout.overflow, false); assert.ok(layout.editor >= 280, 'Editor stays usable');
         assert.ok(await js('document.querySelector(".arise-activity").scrollWidth<=document.querySelector(".arise-activity").clientWidth+1'), 'Activity has no horizontal overflow');
-        assert.ok(await js('document.querySelector(".ai-conversation").clientHeight>=120'), 'Current activity stays readable');
+        const conversationHeight = await js('document.querySelector(".ai-conversation").clientHeight');
+        assert.ok(conversationHeight >= 120, `Current activity stays readable (${conversationHeight}px at ${width}x${height})`);
         const screenshot = path.join(profile, 'editor-' + width + '.png');
         fs.writeFileSync(screenshot, (await window.webContents.capturePage()).toPNG());
         console.log('Screenshot: ' + screenshot);
@@ -183,7 +207,7 @@ app.once('browser-window-created', (_event, window) => {
         await js('(()=>{const b=[...document.querySelectorAll(".ai-permission button")].find(b=>b.textContent==='+JSON.stringify(decision)+');b.click();b.click()})()');
         await until('document.querySelector(".ai-permission")?.dataset.state==='+JSON.stringify(state),'Phase7 '+state);
         assert.deepEqual(fixtureBackend.getStats().slice(before),[decision==='Deny'?'deny_agent_action':'cancel_agent_execution']);
-        assert.equal(await js('document.querySelector(".ai-completion>strong").textContent'),'BLOCKED');
+        assert.equal(await js('document.querySelector(".ai-completion>strong").textContent'),state.toUpperCase());
       }
       for (const [prompt,activity,recovery] of [
         ['Phase7 failure fixture','failure','unavailable'],
@@ -196,8 +220,8 @@ app.once('browser-window-created', (_event, window) => {
         assert.notEqual(await js('document.querySelector(".ai-completion>strong").textContent'),'VERIFIED');
       }
       await activitySubmit('Phase7 false done fixture','unverified');
-      assert.equal(await js('document.querySelector("#ai-history").selectedOptions[0].textContent.startsWith("UNVERIFIED ·")'),true);
-      assert.equal(await js('document.querySelector(".ai-completion>strong").textContent'),'UNVERIFIED');
+      assert.equal(await js('document.querySelector("#ai-history").selectedOptions[0].textContent.startsWith("Not verified ·")'),true);
+      assert.equal(await js('document.querySelector(".ai-completion>strong").textContent'),'INCONCLUSIVE');
       assert.equal(await js('document.querySelector(".activity-symbol").textContent'),' ? '.trim());
       assert.equal(await js('document.querySelector(".ai-result").textContent.includes("Verified by CompletionGate")'),false);
       await activitySubmit('Phase7 stale evidence fixture','unverified');

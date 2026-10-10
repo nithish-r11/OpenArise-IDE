@@ -4,7 +4,8 @@ export function VerificationCard({ item }: { item: AIHistoryItem }) {
   const result = item.result, v = result?.data.verification, completion = completionPresentation(item);
   const state = item.error ? 'unavailable' : v ? v.overall_status === 'VERIFIED' && completion.state !== 'verified' ? completion.state : verificationState(v.overall_status)
     : item.state === 'submitting' || result?.pending_action ? 'pending' : 'unavailable';
-  const tests = result?.data.tool_results.filter(t => t.tool_name === 'execute_tests') ?? [];
+  const tests = result?.data.tool_results.filter(t => ['execute_tests', 'execute_project_tests'].includes(t.tool_name)) ?? [];
+  const builds = result?.data.tool_results.filter(t => t.tool_name === 'build_project') ?? [];
   return <section className="ai-verification outcome-card" aria-label="Verification and evidence" data-state={state} data-verification-status={item.error ? undefined : v?.overall_status}>
     <header><span className="eyebrow">VERIFICATION</span><span className="outcome-badge">{item.error ? 'UNAVAILABLE' : v?.overall_status ?? state}</span></header>
     <div className={'ai-completion completion-' + completion.state} aria-label="Final completion state" data-state={completion.state} role="status" aria-live="polite">
@@ -20,6 +21,7 @@ export function VerificationCard({ item }: { item: AIHistoryItem }) {
       <details className="verification-detail"><summary>Tests performed</summary>
         {tests.length ? tests.map((t, i) => <p key={i}>{t.tool_call_id ?? 'ID withheld'} · {t.executed ? t.success ? 'Passed execution' : 'Failed execution' : 'Not executed'}{t.exit_code !== null ? ' · exit ' + t.exit_code : ''}</p>) : <p>No test-tool details were returned.</p>}
       </details>
+      {!!builds.length && <details className="verification-detail"><summary>Builds performed</summary>{builds.map((t, i) => <p key={i}>{t.tool_call_id ?? 'ID withheld'} · {t.executed ? t.success ? 'Passed build' : 'Failed build' : 'Not executed'} · exit {t.exit_code ?? 'unavailable'}</p>)}<small>Build evidence does not mean tests ran.</small></details>}
       <details className="verification-detail" open><summary>Requirement coverage</summary>
         {v.requirement_results.length ? v.requirement_results.map(q => <article className="verification-row" key={q.requirement_id}>
           <b>{result?.data.requirements.find(r => r.requirement_id === q.requirement_id)?.title ?? q.requirement_id}</b><span className="outcome-badge">{verificationState(q.status)}</span>

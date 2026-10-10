@@ -1,5 +1,6 @@
 import json
 import logging
+from copy import deepcopy
 import requests
 from typing import Optional
 from pydantic import BaseModel, ValidationError
@@ -80,6 +81,11 @@ class OllamaProvider(LLMProvider):
             raise OllamaInvalidResponse("Ollama returned invalid JSON in its response envelope.") from exc
         if not isinstance(data, dict) or not isinstance(data.get("response"), str) or not data["response"].strip() or data.get("done") is False:
             raise OllamaInvalidResponse("Ollama returned an empty or incomplete generation response.")
+        # Developer diagnostics contain numeric timing/token counts only, never
+        # prompts, source code, model text, paths or credentials.
+        metrics = {key: value for key in ('prompt_eval_count', 'eval_count', 'prompt_eval_duration', 'eval_duration')
+                   if isinstance((value := data.get(key)), int) and not isinstance(value, bool) and 0 <= value < 10**15}
+        logger.info('Ollama generation metrics: %s', metrics)
         return data["response"]
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> str:
@@ -89,9 +95,52 @@ class OllamaProvider(LLMProvider):
         return self._generate(payload)
 
     def generate_structured(self, prompt: str, schema: type[BaseModel], system_prompt: Optional[str] = None, **kwargs) -> BaseModel:
-        schema_instruction = "\nYou must respond ONLY in valid JSON matching this schema:\n" + json.dumps(schema.model_json_schema())
+        generation_schema = schema.model_json_schema()
+        if kwargs.get('minimum_tool_calls'):
+            generation_schema['properties']['tool_calls']['minItems'] = kwargs['minimum_tool_calls']
+        # Constrain model arguments to the actual registered tools. AgentAction's
+        # generic argument dictionary alone cannot constrain manifest IDs/revisions.
+        if kwargs.get("tool_schemas") and "ToolCall" in generation_schema.get("$defs", {}):
+            base = generation_schema["$defs"]["ToolCall"]
+            variants = []
+            for tool in kwargs["tool_schemas"]:
+                parameters = tool["parameters"]
+                if any(value.get("enum") == [] for value in parameters.get("properties", {}).values()):
+                    continue
+                variant = deepcopy(base)
+                variant["properties"]["tool_name"] = {"type": "string", "const": tool["name"]}
+                variant["properties"]["arguments"] = deepcopy(parameters)
+                if tool['name'] == 'write_file':
+                    arguments = variant['properties']['arguments']
+                    arguments['required'] = list(dict.fromkeys([*arguments.get('required', []), 'overwrite']))
+                    arguments['properties']['overwrite'].pop('default', None)
+                    arguments['properties']['overwrite']['description'] = 'Explicitly choose true to replace an existing file, or false for exclusive creation of a new file.'
+                variant["required"] = list(dict.fromkeys([*variant.get("required", []), "arguments"]))
+                variants.append(variant)
+            if variants:
+                generation_schema["$defs"]["ToolCall"] = {"anyOf": variants}
+                if kwargs.get('requested_steps'):
+                    by_name = {variant['properties']['tool_name']['const']: variant for variant in variants}
+                    ordered = []
+                    for step in kwargs['requested_steps']:
+                        if step['tool_name'] not in by_name:
+                            raise OllamaInvalidResponse('A requested tool is unavailable in this project; no action was executed.')
+                        variant = deepcopy(by_name[step['tool_name']])
+                        arguments = variant['properties']['arguments']
+                        for key, value in step['arguments'].items():
+                            if key not in arguments.get('properties', {}):
+                                raise OllamaInvalidResponse('Requested tool arguments are invalid; no action was executed.')
+                            arguments['properties'][key]['const'] = value
+                            arguments['required'] = list(dict.fromkeys([*arguments.get('required', []), key]))
+                        ordered.append(variant)
+                    generation_schema['properties']['action_type'] = {'type': 'string', 'const': 'tool_call'}
+                    generation_schema['properties']['tool_calls'] = {'type': 'array', 'items': ordered,
+                        'minItems': len(ordered), 'maxItems': len(ordered)}
+                    generation_schema['required'] = list(dict.fromkeys([*generation_schema.get('required', []), 'tool_calls']))
+                    generation_schema['$defs'].pop('ToolCall')
+        schema_instruction = "\nYou must respond ONLY in valid JSON matching this schema:\n" + json.dumps(generation_schema, separators=(',', ':'))
         payload = {"model": self.model, "prompt": prompt, "system": (system_prompt or "") + schema_instruction,
-                   "stream": False, "format": schema.model_json_schema() if kwargs.get("json_schema") else "json", "options": {"temperature": 0}}
+                   "stream": False, "format": generation_schema if kwargs.get("json_schema") else "json", "options": {"temperature": 0}}
         response_text = self._generate(payload)
         try:
             parsed = json.loads(response_text)

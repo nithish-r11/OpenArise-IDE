@@ -95,8 +95,8 @@ class ProjectScanner:
                 file_type = file_path.suffix.lstrip('.') or 'unknown'
                 
                 is_test = 'test' in filename.lower()
-                is_source = file_type in ('py', 'js', 'ts', 'go', 'rs', 'java', 'cpp', 'c', 'h')
-                is_config = file_type in ('toml', 'yaml', 'yml', 'json', 'ini') or filename in ('requirements.txt', 'setup.py', 'Dockerfile')
+                is_source = file_type in ('py', 'pyw', 'js', 'jsx', 'mjs', 'cjs', 'ts', 'tsx', 'html', 'css', 'scss', 'svg', 'go', 'rs', 'java', 'cpp', 'c', 'h')
+                is_config = file_type in ('toml', 'yaml', 'yml', 'json', 'ini', 'cfg') or filename in ('requirements.txt', 'setup.py', 'Dockerfile', 'yarn.lock')
                 
                 files.append(FileInfo(
                     relative_path=rel_path,

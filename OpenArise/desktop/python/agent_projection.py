@@ -5,7 +5,7 @@ from app.tools.fs import _is_safe_path
 from app.models.schemas import FailureEvent, RecoveryResult
 from intelligence_projection import READS, project_data, clean
 
-TOOLS = {"read_file", "write_file", "execute_python", "execute_tests"}
+TOOLS = {"read_file", "write_file", "execute_python", "execute_tests", "execute_project_tests", "build_project"}
 COUNTS = ("total_requirements", "verified", "partially_verified", "unverified", "inconclusive",
           "evidence_count", "tests_executed", "recovery_attempts")
 
@@ -67,10 +67,16 @@ def project_response(response, method, workspace):
         if pending:
             call = pending["tool_call"]
             resource = safe_path(call.get("arguments", {}).get("path") or call.get("arguments", {}).get("script_path"), workspace.project_root)
+            if call["tool_name"] in ("execute_project_tests", "build_project"):
+                from app.project.commands import project_commands
+                command = next((c for c in project_commands(workspace.project_root) if c["id"] == call.get("arguments", {}).get("command_id")), None)
+                resource = safe_path(command["manifest"], workspace.project_root) if command else None
             pending = {"request_id": pending["request_id"], "tool_call_id": pending["tool_call_id"],
                        "risk_level": pending["risk_level"], "approved": pending["approved"],
                        "tool_name": call["tool_name"] if call["tool_name"] in TOOLS else "unregistered_tool",
                        "resource": resource}
+            if call["tool_name"] in ("execute_project_tests", "build_project") and command and command["revision"] == call.get("arguments", {}).get("revision"):
+                pending["command"] = {"label": clean(command["label"], 160), "script": clean(command["script"], 1000), "revision": command["revision"]}
         details = data.get("data") or {}
         tools = [{"tool_name": t["tool_name"] if t["tool_name"] in TOOLS else "unregistered_tool",
                   "tool_call_id": identifier(t["tool_call_id"]), "success": bool(t["success"]),

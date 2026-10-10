@@ -32,12 +32,14 @@ it('defaults desktop to answer-only, sends mode through existing envelope and di
  expect(model.querySelector('script')).toBeNull();
  expect(request.mock.calls[0][0].params.context_data).toEqual({response_mode:'text_only'});
  expect(screen.getByText('TEST FIXTURE')).toBeTruthy();
- expect(within(screen.getByLabelText('AI result')).getByText('Unverified')).toBeTruthy();
+ expect(within(screen.getByLabelText('AI result')).getByText('Answer')).toBeTruthy();
+ expect(screen.getByLabelText('Final completion state').textContent).toContain('INCONCLUSIVE');
+ expect(document.querySelector<HTMLDetailsElement>('.ai-technical')?.open).toBe(false);
  expect(screen.queryByText('Verified by CompletionGate')).toBeNull();
 });
 it('requires an explicit mode change to request tools',async()=>{
  render(<Harness/>);
- fireEvent.click(screen.getByRole('button',{name:'Agent actions'}));send();
+ fireEvent.click(screen.getByRole('button',{name:'Make changes'}));send();
  await screen.findByText('Recorded backend result.');
  expect(request.mock.calls[0][0].params.context_data).toBeUndefined();
 });
@@ -48,7 +50,7 @@ it('shows actual safe provider failure reason',async()=>{
   return {kind:'backend',source:'test_fixture',response};
  });
  render(<Harness/>);send();
- await within(screen.getByLabelText('AI result')).findByText(/Configured Ollama model is not installed/);
+  expect((await screen.findByRole('alert')).textContent).toContain('Configured Ollama model is not installed');
  expect(screen.queryByText('Verified by CompletionGate')).toBeNull();
 });
 it('surfaces project context failure and preserves the prompt',async()=>{
@@ -74,6 +76,20 @@ it('loads bounded context and reports configured model availability',async()=>{
  expect(screen.queryByText('Context not loaded')).toBeNull();
  expect(request.mock.calls.map(([r])=>r.method)).toEqual(['get_intelligence_snapshot','get_environment_status']);
 });
+it('refresh context requests a real workspace rescan rather than a cached snapshot',async()=>{
+ request.mockImplementation(async(r:any)=>({kind:'backend',source:'test_fixture',response:{
+  request_id:r.request_id,success:true,error:null,action_state:'completed',events:[],
+  data:r.method==='get_environment_status'?intelligence.get_environment_status:{
+   ...intelligence.get_intelligence_snapshot,
+   context_coverage:{sampled_files:2,characters:64,structure_entries:3,truncated:false,unavailable_files:0}
+  }
+ }}));
+ render(<Harness/>);
+ fireEvent.click(screen.getByRole('button',{name:'Refresh context'}));
+ await screen.findByLabelText('Project source context');
+ expect(request.mock.calls.map(([r])=>r.method)).toEqual(['refresh_workspace','get_environment_status']);
+ expect(screen.getByLabelText('Project source context').textContent).toContain('2 source/config excerpts');
+});
 it('rejects oversized model text and unknown response properties',()=>{
  const response=agentFixture('x');
  response.data.data.model_response='x'.repeat(8001);
@@ -87,7 +103,7 @@ it('disables mode changes and duplicate submission while inference is pending',a
  request.mockReturnValue(new Promise(()=>{}));
  render(<Harness/>);send();
  expect((screen.getByRole('button',{name:'Answer only'}) as HTMLButtonElement).disabled).toBe(true);
- expect((screen.getByRole('button',{name:'Agent actions'}) as HTMLButtonElement).disabled).toBe(true);
+ expect((screen.getByRole('button',{name:'Make changes'}) as HTMLButtonElement).disabled).toBe(true);
  fireEvent.submit(document.querySelector('.ai-composer')!);
  expect(request).toHaveBeenCalledTimes(1);
 });

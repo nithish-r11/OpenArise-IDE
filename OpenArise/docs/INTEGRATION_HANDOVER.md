@@ -31,6 +31,7 @@ snapshot, not a live manager object.
 | --- | --- | --- |
 | get_project_information | none | Project identity and root |
 | get_project_state | none | Cached file/module/dependency observations |
+| get_project_capabilities | none | Static frontend/backend/language/manifest/command descriptors; candidates are not execution proof |
 | get_blueprint | none | Initial scaffold, tracked requirements, configured features/tasks |
 | get_requirements | none | Tracked requirements and verification status |
 | get_traceability_graph | none | Production graph including inferred-link flags |
@@ -142,6 +143,11 @@ facts override claimed direct strength. File/symbol evidence is checked against
 files/AST; stale or invalid references block verification. Later mutation-capable tools invalidate prior passing test evidence; a fresh passing test can supersede stale passing evidence, but never contradictory evidence.
 
 Legacy manually constructed TEST_PASS evidence remains a trusted backend input.
+The desktop additionally registers ProjectCommandTool and ProjectBuildTool for
+observed npm tests/builds. Only actual typed-tool executions supply their direct
+TEST_PASS/TEST_FAIL or BUILD_PASS/BUILD_FAIL records. A build is not a test, and
+contradictory build evidence requires fresh matching build proof. Recovery retains
+the original command ID and manifest revision for permission-gated retest.
 The facade provides no arbitrary evidence-submission API. Passing associated tests
 does not prove general semantic correctness of arbitrary user requests.
 
@@ -228,3 +234,8 @@ token streaming, live event push, or forceful cancellation is implemented.
 Luminous training/inference integration and its placeholder evaluator are outside
 this phase. Environment inspection is Python-centric; another project venv may
 remain uninspected.
+
+Observed npm scripts use the installed Node/npm runtime, fixed test/build arguments,
+manifest revision checks, a 120-second timeout and bounded captured output. They
+still execute project-defined code with user privileges and require review through
+PermissionManager. pnpm/yarn and npm dev/start execution are unavailable.

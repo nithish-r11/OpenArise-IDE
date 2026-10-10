@@ -14,9 +14,11 @@ it('exposes only dedicated project operations and fixed IPC channels', async () 
   const invoke = vi.fn(async () => ({}));
   const bridge = createProjectBridge(invoke);
   expect(Object.isFrozen(bridge)).toBe(true);
-  expect(Object.keys(bridge).sort()).toEqual(['listDirectory','observeProject','openProject','readFile','saveFile','setDirty']);
+  expect(Object.keys(bridge).sort()).toEqual(['createFile','createFolder','inspectRename','listDirectory','observeProject','openProject','openRecent','readFile','recentProjects','renamePath','saveFile','searchFiles','setDirty']);
   await bridge.openProject(); await bridge.listDirectory(address); await bridge.readFile(address);
   await bridge.saveFile({ ...address, content: 'pass', revision: 'a'.repeat(64) });
   await bridge.observeProject(address.projectId); await bridge.setDirty(true);
+  await bridge.createFile(address); await bridge.createFolder(address); await bridge.inspectRename(address); await bridge.renamePath({ ...address, destination: 'app/new.py', revision: 'a'.repeat(64) }); await bridge.searchFiles({ projectId: address.projectId, query: 'main' });
+  await bridge.recentProjects(); await bridge.openRecent(address.projectId);
   expect(invoke.mock.calls.map(call => call[0])).toEqual(Object.values(projectChannels));
 });

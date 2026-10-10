@@ -33,7 +33,7 @@ class BackendService:
     """Serializes one workspace's calls and retains command responses for safe replay."""
 
     METHODS = frozenset({
-        "get_project_information", "get_project_state", "get_blueprint", "get_requirements",
+        "get_project_information", "get_project_state", "get_project_capabilities", "get_blueprint", "get_requirements",
         "get_traceability_graph", "get_environment_status", "get_health_report",
         "get_intelligence_snapshot", "get_timeline", "get_drift_report",
         "refresh_workspace", "create_requirement_baseline", "request_agent_execution",

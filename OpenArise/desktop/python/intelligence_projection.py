@@ -71,9 +71,13 @@ def project_data(method, data, workspace):
                 "dependency_status": [fields(d, "name version_specifier declared installed installed_version status source_file action message") for d in data["dependency_status"][:100]],
                 "truncated": len(data["checks"]) > 100 or len(data["dependency_status"]) > 100}
     if method in ("get_intelligence_snapshot", "refresh_workspace"):
+        from app.context.project import build_project_context
+        context = build_project_context(workspace.project_root, workspace.state_manager.state)
         return {**fields(data, "project_id project_name scan_timestamp"),
                 **{k: data[k] for k in ("project_state_summary", "blueprint_summary", "traceability_summary", "environment_summary", "health_summary", "requirement_summary")},
                 "drift_summary": [drift(d) for d in data["drift_summary"][:100]],
+                "context_coverage": {"sampled_files": len(context["files"]), "characters": sum(len(f["content"]) for f in context["files"]),
+                                     "structure_entries": len(context["structure"]), "truncated": context["truncated"], "unavailable_files": len(context["unavailable"])},
                 **ProjectIntelligenceContextAdapter(workspace).build_bounded_context()}
     if method == "get_timeline":
         return {"items": timeline(data), "total": len(data), "truncated": len(data) > 100}

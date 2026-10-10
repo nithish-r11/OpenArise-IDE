@@ -20,6 +20,47 @@ class OfflineProvider(LLMProvider):
     def health_check(self):
         return True
 
+class NodePermissionProjectionTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        (self.root / "package.json").write_text(json.dumps({"scripts": {"test": "node --test actual.cjs"}}))
+
+    def projected(self, stale=False):
+        from app.project.commands import project_commands
+        c = project_commands(str(self.root))[0]
+        provider = OfflineProvider()
+        provider.generate_structured = lambda **kwargs: AgentAction(action_type="tool_call", tool_calls=[ToolCall(tool_name="execute_project_tests", arguments={"command_id": c["id"], "revision": c["revision"]})])
+        service = build_service(str(self.root), provider)
+        self.addCleanup(lambda: service.dispatch({"request_id": "stop", "method": "shutdown", "params": {}}))
+        r = service.dispatch({"request_id": "node", "method": "request_agent_execution", "params": {"prompt": "Run npm tests."}}).model_dump(mode="json")
+        if stale:
+            # A previously valid proposal becomes stale after planning. Its
+            # current projection must still withhold the approval preview.
+            (self.root / "package.json").write_text(json.dumps({"scripts": {"test": "node --test replacement.cjs"}}))
+        return project_response(r, "request_agent_execution", service.workspace)["data"]["pending_action"]
+
+    def test_reviewed_script_is_separate_from_contained_resource(self):
+        p = self.projected()
+        self.assertEqual(p["resource"], "package.json")
+        self.assertEqual(p["command"]["script"], "node --test actual.cjs")
+        self.assertEqual(set(p["command"]), {"label", "script", "revision"})
+
+    def test_stale_manifest_revision_has_no_approvable_command_preview(self):
+        self.assertNotIn("command", self.projected(stale=True))
+
+    def test_invalid_model_command_is_failure_without_permission_or_execution(self):
+        provider = OfflineProvider()
+        provider.generate_structured = lambda **kwargs: AgentAction(action_type="tool_call", tool_calls=[ToolCall(tool_name="execute_project_tests", arguments={"command_id": "guessed", "revision": "a" * 64})])
+        service = build_service(str(self.root), provider)
+        self.addCleanup(lambda: service.dispatch({"request_id": "stop-invalid", "method": "shutdown", "params": {}}))
+        raw = service.dispatch({"request_id": "invalid-node", "method": "request_agent_execution", "params": {"prompt": "Run tests."}}).model_dump(mode="json")
+        result = project_response(raw, "request_agent_execution", service.workspace)["data"]
+        self.assertEqual(result["status"], "failure")
+        self.assertIsNone(result["pending_action"])
+        self.assertEqual(result["data"]["tool_results"], [])
+        self.assertNotEqual(result["data"]["verification"]["overall_status"], "VERIFIED")
+
 class AgentHostTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -60,6 +101,36 @@ class AgentHostTests(unittest.TestCase):
         self.assertEqual(result["data"]["status"], "denied")
         self.assertFalse((self.root / "result.py").exists())
         self.assertFalse(result["data"]["data"]["tool_results"][0]["executed"])
+
+    def test_resume_without_explicit_allow_does_not_write(self):
+        self.send("a", "request_agent_execution", prompt="Write result.py")
+        result = self.send("unapproved", "resume_agent_execution", request_id="a", tool_call_id="tool-1")
+        self.assertEqual(result["data"]["status"], "permission_required")
+        self.assertFalse(result["data"]["pending_action"]["approved"])
+        self.assertFalse((self.root / "result.py").exists())
+
+    def test_wrong_tool_approval_then_resume_cannot_write(self):
+        self.send("a", "request_agent_execution", prompt="Write result.py")
+        invalid = self.send("wrong", "approve_agent_action", request_id="a", tool_call_id="other-tool")
+        self.assertFalse(invalid["success"])
+        result = self.send("resume", "resume_agent_execution", request_id="a", tool_call_id="tool-1")
+        self.assertEqual(result["data"]["status"], "permission_required")
+        self.assertFalse((self.root / "result.py").exists())
+
+    def test_cached_approval_after_denial_cannot_execute(self):
+        self.send("a", "request_agent_execution", prompt="Write result.py")
+        self.send("approve", "approve_agent_action", request_id="a", tool_call_id="tool-1")
+        self.send("deny", "deny_agent_action", request_id="a", tool_call_id="tool-1")
+        # Transport replay may return the recorded approval; execution uses current authority.
+        self.assertEqual(self.send("approve", "approve_agent_action", request_id="a", tool_call_id="tool-1")["data"]["status"], "approved")
+        self.assertFalse(self.send("resume", "resume_agent_execution", request_id="a", tool_call_id="tool-1")["success"])
+        self.assertFalse((self.root / "result.py").exists())
+
+    def test_bare_stale_grant_does_not_bypass_production_host_permission(self):
+        self.service.workspace.orchestrator.permission_manager.grant_approval("tool-1")
+        result = self.send("a", "request_agent_execution", prompt="Write result.py")
+        self.assertEqual(result["data"]["status"], "permission_required")
+        self.assertFalse((self.root / "result.py").exists())
 
     def test_cancel_revokes_pending_approval(self):
         self.send("a", "request_agent_execution", prompt="Write result.py")

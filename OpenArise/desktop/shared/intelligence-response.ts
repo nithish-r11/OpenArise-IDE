@@ -25,8 +25,11 @@ const timeline = shape({ event_id: text, timestamp: text, event_type: enumeratio
 const bounded = shape({ project_name: text, total_files: count, requirements_count: count, traceability_nodes: count, health_issues: count, missing_dependencies: count });
 const withOllama = (check: Check): Check => value => {
   if (!object(value)) return false;
-  const { ollama, ...rest } = value;
-  return check(rest) && (!('ollama' in value) || shape({ status: enumeration('ready', 'ollama_unavailable', 'model_unavailable'),
+  const { ollama, context_coverage, ...rest } = value;
+  return check(rest) && (!('context_coverage' in value) || shape({ sampled_files: v => count(v) && Number(v) <= 16,
+    characters: v => count(v) && Number(v) <= 16000, structure_entries: v => count(v) && Number(v) <= 80,
+    truncated: bool, unavailable_files: v => count(v) && Number(v) <= 10 })(context_coverage))
+    && (!('ollama' in value) || shape({ status: enumeration('ready', 'ollama_unavailable', 'model_unavailable'),
     message: text, model: v => text(v) && String(v).length <= 200,
     timeout_seconds: v => count(v) && Number(v) >= 30 && Number(v) <= 900 })(ollama));
 };

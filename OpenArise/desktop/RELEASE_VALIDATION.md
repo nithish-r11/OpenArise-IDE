@@ -1,5 +1,30 @@
 # Windows release validation — final failure UI fix
 
+**October 9 latest source:** the explicit Qwen tool-sequence/recovery fix is
+validated by 278 backend tests, 55 rerun Python-host tests and real Qwen evidence.
+The 276 unchanged Vitest tests and desktop build/smokes are carried forward.
+New NSIS output: `.packaging/final-recovery-release-20261009/`; build, per-user
+install, source-matching payload and one visible normal launch are VERIFIED.
+Ordinary uninstall exited 0 and removed the executable and registration: VERIFIED.
+Installer SHA-256: `D2EE868726D70F17574E5959F973402AF3FF2C855FF51B994ADD032D1BD1ADEE`
+(127,304,074 bytes; Authenticode NotSigned). Installed payload: 30 ASAR entries,
+1,599 files, 82 backend and five host files identical to current source. Bundled
+runtime read/save/run/pytest passed; current-source live AI and the package's
+visible launch are separate checks. Old hashes below do
+not represent the new backend. See
+[FINAL_RECOVERY_ACCEPTANCE_REPORT.md](FINAL_RECOVERY_ACCEPTANCE_REPORT.md).
+
+**October 8 product-audit update:** the release hashes, payload comparisons and
+packaged acceptance recorded below predate the new actual-source context,
+frontend editing and approved npm capabilities. Existing artifacts are historical,
+not current with this working tree. No new release build is claimed in this audit.
+See [PRODUCT_QUALITY_REPORT.md](PRODUCT_QUALITY_REPORT.md) for latest source tests
+and real full-stack/Python desktop validation. Packaging and policy results below
+must be repeated against a future rebuilt release before distribution claims.
+The subsequent October 9 Explorer/AI/npm verification source changes are recorded
+in [PRODUCT_IMPROVEMENT_REPORT.md](PRODUCT_IMPROVEMENT_REPORT.md). No new Windows
+artifact was rebuilt or validated for that source improvement.
+
 Review: **October 8, 2026 (Asia/Calcutta)**. OpenArise 0.1.0, Windows x64.
 Recorded tests, model responses and artifact timestamps retain their actual
 October 7–8 dates; they are not all claimed as October 8 reruns.

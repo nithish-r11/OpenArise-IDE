@@ -1,8 +1,9 @@
 # OpenArise backend
 
 OpenArise currently contains the Person 1 AI engine and Person 2 project intelligence
-backend, with an integration-hardening layer for future Person 3 desktop work.
-No desktop application or transport server is implemented.
+backend, with an integration-hardening layer consumed by the Electron application
+in ../desktop. The backend facade itself remains an in-process dispatcher; the
+desktop owns its supervised stdio process wrapper, not an HTTP service.
 
 ## Current contracts
 
@@ -18,7 +19,15 @@ a future process wrapper. It opens no HTTP/WebSocket/stdio listener.
 
 - Read-only Python project scanning, AST metadata, dependencies, health, blueprint
   scaffolding, stable traceability mapping, snapshots, timeline, and drift checks.
+- Static frontend/backend capabilities and bounded actual source/config/test
+  context through ProjectWorkspaceService. Framework/entry/run candidates are
+  observations, not execution or dependency-installation proof.
 - Synchronous Ollama text/structured inference and registered engineering tools.
+- Shared observed npm test/build command resolution and permission-gated project
+  tools, explicitly registered by the desktop host. IDs, manifest revisions and
+  supported npm actions are rechecked before fixed Node/npm invocation; no package
+  installation or renderer-selected executable is added. Build evidence is distinct
+  from test evidence, and supported recovery retests the original validation tool.
 - Retained permission-required actions with separate approve/resume, deny/cancel,
   stable request/tool IDs, and in-process replay protection.
 - Requirement-associated evidence and a CompletionGate that distinguishes verified,
@@ -30,6 +39,8 @@ Tool paths are checked against the project root, and configured secret files are
 excluded. Execution uses ordinary subprocesses with the backend interpreter and
 project cwd; there is no OS sandbox. PermissionManager is authoritative for primary
 tools and recovery validation. Automatic dependency installation is disabled.
+The shared writer uses exclusive new-file creation and atomic existing-file
+replacement. Project evidence snapshots include frontend source/config changes.
 
 ## Configuration and dependencies
 

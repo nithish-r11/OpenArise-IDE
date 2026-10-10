@@ -1,4 +1,4 @@
-# AI workspace architecture (October 6 Ollama and recovery acceptance)
+# AI workspace architecture (October 9 product improvement)
 
 ## Existing backend, desktop transport
 
@@ -25,8 +25,9 @@ to React. No model pulls, package installs, provider configuration UI or Luminou
 inference are included.
 
 The interpreter is the existing ai-engine/.venv Python. The host explicitly
-registers the existing read_file, write_file, execute_python and execute_tests
-tools with production PermissionManager(test_mode=False). Person 1 controls tool
+registers read_file, write_file, execute_python, execute_tests,
+execute_project_tests and build_project with production
+PermissionManager(test_mode=False). Person 1 controls tool
 execution and verification. AI tool execution uses that backend interpreter;
 the separately displayed Phase 3 project interpreter applies to manual Run/Test.
 Opening a project loads bounded context without starting inference. Context loading, refresh or submission lazily
@@ -51,10 +52,38 @@ UI and main process; an AI write can still race later edits, so Phase 2 disk rev
 conflicts remain authoritative. Reopen clean tabs to inspect files changed by AI.
 Project replacement is blocked while AI work or a permission action is active.
 
-Before initial execution, the host calls the existing refresh_workspace method. Project opening performs the existing initial scan; context loading/refresh reads the snapshot and environment without initializing agent memory. ProjectWorkspaceService automatically incorporates the
-existing ProjectIntelligenceContextAdapter's bounded summary. The desktop context
-view uses that same adapter and shows only factual counts and environment
-observations. Unknown context is labelled unavailable/not loaded, not invented.
+Before initial execution, the host calls the existing refresh_workspace method.
+Project opening performs the existing initial scan; explicit Refresh context
+rescans through that same facade without initializing agent memory.
+ProjectWorkspaceService incorporates the existing ProjectIntelligenceContextAdapter
+summary and backend-built actual source context, overriding caller-supplied file
+context. ContextManager supplies up to 80 relative paths and 16 UTF-8 source/config/test
+excerpts, limited to 2,400 characters each and 16,000 content characters in total.
+Entry points/manifests/tests take priority; dependencies/runtime, protected files,
+links and binary content are excluded. Common secret patterns and quoted keys
+are redacted. Redaction is not exhaustive secret detection. Source is untrusted
+project data, never executable instructions. Missing and bounded context is explicit.
+The renderer receives only coverage/counts and environment observations; it does
+not assemble project intelligence or read file context for the agent.
+Answer-only prompts use these actual excerpts and return inert model text with
+no tool calls. Narrative output alone cannot satisfy CompletionGate.
+
+Static project capabilities come from app.project.capabilities through
+ProjectWorkspaceService, not React inference. Manual npm test/build uses retained
+descriptor IDs, native script approval, fresh manifest-revision validation and
+fixed Node/npm arguments through the existing terminal/file-host boundary.
+The existing agent also has permission-gated execute_project_tests/build_project
+tools for detected, supported npm scripts. Their schemas contain observed command
+IDs and manifest revisions; the renderer supplies neither executable nor argv.
+Approval shows the observed script, and execution re-resolves that exact descriptor
+and revision using shared backend command resolution. Backend output is bounded
+to 128 KiB with a 120-second process timeout. Supported recovery retests the original
+test/build command. BUILD_PASS/BUILD_FAIL remain distinct from TEST_PASS/TEST_FAIL;
+build-only verification does not increment tests performed. Frontend source/config changes now participate in
+project snapshots, so old Python test evidence is invalidated by those changes.
+Saving, reloading changed disk content or creating a file requests the real
+retained gate again; there is no renderer-created proof. Manual Node success
+does not become agent verification evidence.
 
 The original envelope request ID is preserved as the agent ID. Approval, resume,
 denial, cancellation and retrieval each use a fresh command ID and target the
@@ -64,9 +93,11 @@ the desktop does not replace it. Cross-crash exactly-once execution is not claim
 ## Permissions
 
 A permission card begins with pending_action returned by the backend. Its final decision is retained in session history.
-It shows risk category, safe tool name, safe relative resource if available and
-request/tool IDs. Raw command arguments, file content and replacement arguments
-are never exposed or accepted.
+It shows a friendly action and safe relative scope. Exact tool/request IDs and risk
+category are available under Action details. The separately projected npm script
+preview is shown before approval; a missing current descriptor disables Allow.
+Executable/argv, file content and replacement arguments are never accepted from
+React. Approval and execution retain the backend's exact action arguments.
 
 Allow sends approve_agent_action and, only after a confirmed approved response,
 sends a separate resume_agent_execution with the same retained IDs. Approved work
@@ -84,12 +115,15 @@ than assuming the outstanding action was safely cancelled.
 
 Outer response.success indicates handled dispatch only. Nested agent status
 distinguishes success, unverified, failure, permission_required, approved, denied
-and cancelled. The UI displays Verified by CompletionGate only when nested status
+and cancelled. The main UI displays Verified only when nested status
 is success, the action/lifecycle are completed and verification.overall_status is VERIFIED, with consistent coverage and no returned failure, active stale evidence or unresolved issue. It never
-converts unverified to success.
+converts unverified to success. Answer-only responses show Answer; failed recovery
+shows Rolled back only when the backend returned ROLLED_BACK. Evidence, gate,
+recovery, exact state/IDs and tool results stay available in collapsed Details.
 
-While waiting, Submitting and Backend command active describe local transport
-state. No inferred Thinking/Planning/progress percentages are shown. Backend
+While waiting, Working and Waiting for a response describe local transport
+state; no source claim is shown before a response. No inferred
+Thinking/Planning/progress percentages are shown. Backend
 states and events appear only after the synchronous command returns. Event lists
 explicitly say recorded observations, not live streaming. No polling claims live
 access while BackendService holds its synchronous lock.

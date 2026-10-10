@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { AIPanel } from '../src/components/AI/AIPanel';
 import { useAI } from '../src/workspace/useAI';
 import { agentFixture, stamp } from './ai-fixtures';
+import intelligence from './fixtures/intelligence.json';
 const project = { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', name: 'Orbit', rootPath: 'C:/Orbit' };
 let request: ReturnType<typeof vi.fn>;
 function Harness({ blocked = false }: { blocked?: boolean }) {
@@ -30,7 +31,7 @@ describe('AI workspace', () => {
     fireEvent.keyDown(screen.getByLabelText('Ask OpenArise'), { key: 'Enter', shiftKey: true });
     expect(request).not.toHaveBeenCalled();
     fireEvent.keyDown(screen.getByLabelText('Ask OpenArise'), { key: 'Enter' });
-    await within(screen.getByLabelText('AI result')).findByText('Unverified');
+    await within(screen.getByLabelText('AI result')).findByText('Not verified');
     const [envelope, selected] = request.mock.calls[0];
     expect(selected).toBe(project.id); expect(envelope.params).toEqual({ prompt: 'First line\nSecond line' });
     expect(envelope.request_id).toMatch(/^[a-f0-9-]{36}$/);
@@ -47,12 +48,13 @@ describe('AI workspace', () => {
     render(<Harness />); draft(); send();
     fireEvent.keyDown(screen.getByLabelText('Ask OpenArise'), { key: 'Enter' });
     expect(request).toHaveBeenCalledTimes(1);
-    expect(within(screen.getByLabelText('AI result')).getByText('Submitting')).toBeTruthy();
+    expect(within(screen.getByLabelText('AI result')).getByText('Working…')).toBeTruthy();
+    expect(screen.queryByLabelText('AI data source')).toBeNull();
     expect(screen.queryByText(/Recorded activity/)).toBeNull();
-    expect(screen.getByText(/Synchronous execution cannot be interrupted/)).toBeTruthy();
+    expect(screen.getByText(/You can cancel at the next permission request/)).toBeTruthy();
     const result = agentFixture(request.mock.calls[0][0].request_id); result.events = [];
     complete({ kind: 'backend', source: 'test_fixture', response: result });
-    await within(screen.getByLabelText('AI result')).findByText('Unverified');
+    await within(screen.getByLabelText('AI result')).findByText('Not verified');
     expect(screen.queryByText(/Recorded activity/)).toBeNull();
   });
   it('retains prompt and shows backend unavailable without claiming success', async () => {
@@ -62,7 +64,7 @@ describe('AI workspace', () => {
     expect((screen.getByLabelText('Ask OpenArise') as HTMLTextAreaElement).value).toBe('Keep my request');
     expect(screen.queryByText('Verified by CompletionGate')).toBeNull();
   });
-  it.each([['success', 'Verified'], ['unverified', 'Unverified'], ['failure', 'Failed'], ['denied', 'Denied'], ['cancelled', 'Cancelled']] as const)('renders %s independently of outer success', async (status, label) => {
+  it.each([['success', 'Verified'], ['unverified', 'Not verified'], ['failure', 'Failed'], ['denied', 'Denied'], ['cancelled', 'Cancelled']] as const)('renders %s independently of outer success', async (status, label) => {
     request.mockImplementation(async (r: any) => ({ kind: 'backend', source: 'test_fixture', response: agentFixture(r.request_id, status) }));
     render(<Harness />); draft(); send();
     await within(screen.getByLabelText('AI result')).findByText(label);
@@ -79,7 +81,7 @@ describe('AI workspace', () => {
     expect(screen.getByText('app/main.py')).toBeTruthy();
     expect(request).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
-    await within(screen.getByLabelText('AI result')).findByText('Unverified');
+    await within(screen.getByLabelText('AI result')).findByText('Not verified');
     expect(request.mock.calls.map(([r]) => r.method)).toEqual(['request_agent_execution', 'approve_agent_action', 'resume_agent_execution']);
     expect(request.mock.calls[1][0].params).toEqual({ request_id: request.mock.calls[0][0].request_id, tool_call_id: 'tool-1' });
     expect(request.mock.calls[2][0].params).toEqual(request.mock.calls[1][0].params);
@@ -93,6 +95,19 @@ describe('AI workspace', () => {
     await within(screen.getByLabelText('AI result')).findByText(button === 'Deny' ? 'Denied' : 'Cancelled');
     expect(request.mock.calls.at(-1)![0].method).toBe(button === 'Deny' ? 'deny_agent_action' : 'cancel_agent_execution');
     expect(request).toHaveBeenCalledTimes(2);
+  });
+  it.each(['tool_call_id', 'tool_name', 'risk_level', 'resource', 'approved'] as const)('does not resume a mismatched approval %s', async field => {
+    request.mockImplementation(async (r: any) => {
+      const response = agentFixture(r.request_id, r.method === 'request_agent_execution' ? 'permission_required' : 'approved', r.params.request_id ?? r.request_id);
+      if (r.method === 'approve_agent_action') {
+        Object.assign(response.data.pending_action!, { [field]: { tool_call_id: 'other-tool', tool_name: 'execute_python', risk_level: 'EXECUTE', resource: 'other.py', approved: false }[field] });
+      }
+      return { kind: 'backend', source: 'test_fixture', response };
+    });
+    render(<Harness />); draft(); send(); await screen.findByText('OpenArise needs permission');
+    fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
+    await screen.findAllByText('Approval did not match the reviewed action. Execution was not resumed.');
+    expect(request.mock.calls.map(([r]) => r.method)).toEqual(['request_agent_execution', 'approve_agent_action']);
   });
   it('shows only backend-reported recovery activity without assuming recovery success', async () => {
     request.mockImplementation(async (r: any) => {
@@ -108,16 +123,16 @@ describe('AI workspace', () => {
   });
   it('loads bounded context counts and environment with fixed read methods', async () => {
     request.mockImplementation(async (r: any) => ({ kind: 'backend', source: 'test_fixture', response: { request_id: r.request_id, success: true, action_state: 'completed', error: null, events: [],
-      data: r.method === 'get_intelligence_snapshot' ? { intelligence_summary: { total_files: 4, requirements_count: 2, health_issues: 1, traceability_nodes: 3 } } :
+      data: r.method === 'refresh_workspace' ? { ...intelligence.get_intelligence_snapshot, intelligence_summary: { ...intelligence.get_intelligence_snapshot.intelligence_summary, total_files: 4, requirements_count: 2, health_issues: 1, traceability_nodes: 3 } } :
       { python_available: true, python_version: '3.13.5', virtualenv_present: false, virtualenv_usable: false, inspection_scope: 'current_environment' } } }));
     render(<Harness />); fireEvent.click(screen.getByRole('button', { name: 'Refresh context' }));
     await screen.findByText(/4 files · 2 requirements/);
     expect(screen.getByText(/1 health findings · 3 traceability nodes/)).toBeTruthy();
     expect(screen.getByText(/Backend Python 3.13.5/)).toBeTruthy();
-    expect(request.mock.calls.map(([r]) => r.method)).toEqual(['get_intelligence_snapshot', 'get_environment_status']);
+    expect(request.mock.calls.map(([r]) => r.method)).toEqual(['refresh_workspace', 'get_environment_status']);
   });
   it('retains session history and can select earlier results', async () => {
-    render(<Harness />); draft('First'); send(); await within(screen.getByLabelText('AI result')).findByText('Unverified');
+    render(<Harness />); draft('First'); send(); await within(screen.getByLabelText('AI result')).findByText('Not verified');
     draft('Second'); send();
     await waitFor(() => expect(screen.getAllByRole('option')).toHaveLength(2));
     const first = request.mock.calls[0][0].request_id;

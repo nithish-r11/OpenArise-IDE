@@ -52,4 +52,8 @@ class ContextManager:
         intelligence = bounded_intelligence_summary(self.project_state.get("intelligence_summary"))
         if intelligence:
             summary["intelligence_summary"] = intelligence
+        from app.context.project import bounded_project_context
+        project = bounded_project_context(self.project_state.get("project_context"))
+        if project:
+            summary["project_context"] = project
         return summary

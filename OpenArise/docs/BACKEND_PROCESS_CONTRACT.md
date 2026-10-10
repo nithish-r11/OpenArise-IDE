@@ -104,6 +104,12 @@ Forced process termination has no cleanup guarantee.
 
 ## Scope
 
-No HTTP/WebSocket/stdio transport, Electron/Tauri integration, package installation,
-or OS sandbox is implemented. See [INTEGRATION_HANDOVER.md](INTEGRATION_HANDOVER.md)
+This backend dispatcher itself implements no HTTP/WebSocket/stdio listener,
+package installation or OS sandbox. The Electron desktop's supervised process
+wrapper consumes it through the same facade. `get_project_capabilities` is a
+read-only allowlisted workspace method with no parameters; its static framework,
+manifest and command descriptors do not authorize execution. Before agent
+execution, the workspace overrides supplied project file context with bounded
+actual source observations from its retained root.
+See [INTEGRATION_HANDOVER.md](INTEGRATION_HANDOVER.md)
 for service methods, verification outcomes, permissions, errors, and limitations.

@@ -20,7 +20,13 @@ const projects = new ProjectService();
 const adapter = new WorkspaceBackendAdapter(projects);
 const backend = new DesktopBackendService(testAdapter ?? adapter, testAdapter ? 'test_fixture' : 'backend');
 const dirty = { value: false };
-const terminals = new TerminalService(projects, dirty);
+const terminals = new TerminalService(projects, dirty, async command => {
+  if (!window || window.isDestroyed()) return false;
+  const decision = await dialog.showMessageBox(window, { type: 'warning', title: 'Run project script?',
+    message: command.label, detail: 'Folder: ' + command.directory + '\nScript: ' + command.script + '\n\nThis runs project-defined code with your user privileges. Only approve projects you trust. npm pre/post lifecycle scripts are disabled. This result is not CompletionGate verification.',
+    buttons: ['Cancel', 'Run script'], defaultId: 0, cancelId: 0 });
+  return decision.response === 1;
+});
 projects.canChange = () => !adapter.blocked && !backend.blocked;
 projects.beforeChange = async () => { await adapter.reset(); await terminals.reset(); };
 let window: BrowserWindow | null = null;

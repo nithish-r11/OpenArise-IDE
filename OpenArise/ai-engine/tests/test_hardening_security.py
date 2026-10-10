@@ -80,8 +80,8 @@ def test_recovery_checks_actual_tool_risk_not_model_declared_read_risk(tmp_path)
 def test_recovery_retest_requires_separate_execute_permission_before_mutation(tmp_path):
     permission = PermissionManager()
     permission.grant_approval("plan")
-    permission.grant_approval("write")
     engine, failure, diagnosis = make_recovery(tmp_path, permission)
+    permission.grant_call_approval("plan", engine.planner.llm.structured_response.proposed_actions[0], RiskLevel.WRITE)
     result = engine.attempt_recovery(failure, diagnosis, 1, 1)
     assert result.status == RecoveryState.BLOCKED
     assert "validation" in result.final_result

@@ -31,7 +31,8 @@ describe('Phase 7 fixture UI (no live Ollama)', () => {
     render(<Harness />); send();
     await screen.findByText('OpenArise needs permission');
     const card = screen.getByLabelText('Permission request');
-    expect(card.textContent).toContain(risk === 'WRITE' ? 'write project files' : 'execute Python or tests');
+    expect(card.textContent).toContain(risk === 'WRITE' ? 'Allow OpenArise to change this file?' : 'Allow this project command to run?');
+    expect(card.textContent).toContain(risk === 'WRITE' ? 'WRITE · write_file' : 'EXECUTE · execute_tests');
     expect(card.textContent).toContain('app/main.py');
     expect(screen.getByLabelText('Verification and evidence').getAttribute('data-state')).toBe('pending');
     expect(final().getByText('BLOCKED')).toBeTruthy();
@@ -63,7 +64,7 @@ describe('Phase 7 fixture UI (no live Ollama)', () => {
     await screen.findByText('Action completed');
     expect(request.mock.calls.map(([r]) => r.method)).toEqual(['request_agent_execution', 'approve_agent_action', 'resume_agent_execution']);
     expect(request.mock.calls[2][0].params).toEqual(command.params);
-    expect(final().getByText('UNVERIFIED')).toBeTruthy();
+    expect(final().getByText('INCONCLUSIVE')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Allow' })).toBeNull();
   });
   it.each(['Deny', 'Cancel'] as const)('shows pending and returned %s and prevents duplicate actions', async name => {
@@ -78,7 +79,7 @@ describe('Phase 7 fixture UI (no live Ollama)', () => {
     const command = request.mock.calls[1][0];
     resolve({ kind: 'backend', source: 'test_fixture', response: agentFixture(command.request_id, name === 'Deny' ? 'denied' : 'cancelled', command.params.request_id) });
     await waitFor(() => expect(screen.getByLabelText('Permission request').getAttribute('data-state')).toBe(name === 'Deny' ? 'denied' : 'cancelled'));
-    expect(final().getByText('BLOCKED')).toBeTruthy();
+    expect(final().getByText(name === 'Deny' ? 'DENIED' : 'CANCELLED')).toBeTruthy();
     expect(request.mock.calls.at(-1)![0].method).toBe(name === 'Deny' ? 'deny_agent_action' : 'cancel_agent_execution');
     expect(request).toHaveBeenCalledTimes(2);
   });
@@ -131,10 +132,10 @@ describe('Phase 7 fixture UI (no live Ollama)', () => {
     render(<Harness />); send(); await screen.findByText('Fixture recovery outcome.');
     expect(screen.getByLabelText('Failure and recovery').getAttribute('data-state')).toBe(state);
     expect(screen.getByText('Fixture retest recorded')).toBeTruthy();
-    expect(final().getByText('UNVERIFIED')).toBeTruthy();
+    expect(final().getByText('INCONCLUSIVE')).toBeTruthy();
   });
   it('renders an unverified gate with requirement coverage and missing evidence', async () => {
-    render(<Harness />); send(); await final().findByText('UNVERIFIED');
+    render(<Harness />); send(); await final().findByText('INCONCLUSIVE');
     expect(screen.getByText('Tracked requirement')).toBeTruthy(); expect(screen.getByText('Requires direct test or file evidence')).toBeTruthy();
     expect(screen.queryByText('Verified by CompletionGate')).toBeNull();
   });
@@ -162,7 +163,7 @@ describe('Phase 7 fixture UI (no live Ollama)', () => {
     expect(final().queryByText('VERIFIED')).toBeNull(); expect(screen.queryByText('Verified by CompletionGate')).toBeNull();
     expect(screen.getByLabelText('Arise Activity Visualizer').getAttribute('data-state')).not.toBe('completed');
     expect(document.querySelector('.activity-symbol')?.textContent).not.toBe('✓');
-    expect(screen.getByRole('option').textContent?.startsWith('VERIFIED ·')).toBe(false);
+    expect(screen.getByRole('option').textContent?.startsWith('Verified ·')).toBe(false);
   });
   it('shows stale and invalid evidence plus explicit failure flags', async () => {
     respond('unverified', d => {
@@ -184,9 +185,9 @@ describe('Phase 7 fixture UI (no live Ollama)', () => {
   });
   it.each(['backend', undefined] as const)('labels explicit %s source independently of fixture validation', async source => {
     request.mockImplementation(async (r: any) => ({ kind: 'backend', source, response: agentFixture(r.request_id) }));
-    render(<Harness />); send(); await final().findByText('UNVERIFIED');
+    render(<Harness />); send(); await final().findByText('INCONCLUSIVE');
     const label = screen.getByLabelText('AI data source');
-    expect(label.textContent).toContain(source ? 'BACKEND RESPONSE' : 'SOURCE NOT REPORTED');
+    expect(label.textContent).toContain(source ? 'Local AI' : 'SOURCE NOT REPORTED');
     expect(label.textContent).not.toContain('TEST FIXTURE');
   });
   it('main owns fixture provenance and overrides adapter claims', async () => {

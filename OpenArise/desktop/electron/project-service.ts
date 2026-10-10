@@ -2,20 +2,28 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { backendPython, backendRoot, desktopPython } from './runtime-paths';
-import type { Entry, FileBuffer, Project, ProjectObservation, Result } from '../src/types/project';
+import type { Entry, FileBuffer, Project, ProjectObservation, Result, RenameInspection } from '../src/types/project';
+import { validCapabilities, validProjectCommand } from '../shared/capabilities';
 
 const error = (message: string): Result<never> => ({ ok: false, code: 'unavailable', message });
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 function validData(method: string, value: unknown): boolean {
-  if (method === 'list') return Array.isArray(value) && value.length <= 2000 && value.every(v =>
+  if (method === 'list' || method === 'search') return Array.isArray(value) && value.length <= (method === 'search' ? 200 : 2000) && value.every(v =>
     isObject(v) && typeof v.name === 'string' && typeof v.path === 'string' && ['file', 'folder'].includes(String(v.kind)));
   if (!isObject(value)) return false;
   if (method === 'environment') return typeof value.executable === 'string' && typeof value.label === 'string' && typeof value.message === 'string' && ['ready', 'unavailable'].includes(String(value.status));
   if (method === 'validate_run') return typeof value.path === 'string';
   if (method === 'info') return typeof value.name === 'string' && typeof value.rootPath === 'string';
-  if (method === 'read' || method === 'save') return typeof value.path === 'string' && typeof value.content === 'string'
+  if (['create_folder', 'rename', 'inspect_rename'].includes(method)) return typeof value.path === 'string' && ['folder', 'file'].includes(String(value.kind))
+    && (method !== 'inspect_rename' || typeof value.revision === 'string' && /^[a-f0-9]{64}$/.test(value.revision));
+  if (method === 'read' || method === 'save' || method === 'create') return typeof value.path === 'string' && typeof value.content === 'string'
     && typeof value.readOnly === 'boolean' && typeof value.revision === 'string' && /^[a-f0-9]{64}$/.test(value.revision);
-  if (method === 'observe') return Number.isSafeInteger(value.files) && Number.isSafeInteger(value.modules) && typeof value.observedAt === 'string';
+  if (method === 'observe') return Number.isSafeInteger(value.files) && Number.isSafeInteger(value.modules) && typeof value.observedAt === 'string' && validCapabilities(value.capabilities);
+  if (method === 'command_capability') return validProjectCommand(value);
+  if (method === 'prepare_command') return typeof value.executable === 'string' && path.isAbsolute(value.executable)
+    && Array.isArray(value.arguments) && value.arguments.length === 4 && value.arguments.every(v => typeof v === 'string')
+    && value.arguments[1] === 'run' && ['test', 'build'].includes(value.arguments[2]) && value.arguments[3] === '--ignore-scripts'
+    && typeof value.directory === 'string' && path.isAbsolute(value.directory) && typeof value.label === 'string' && typeof value.test === 'boolean';
   return method === 'shutdown' && value.closed === true;
 }
 export class FileProcess {
@@ -80,6 +88,7 @@ export class FileProcess {
   }
 }
 export class ProjectService {
+  private recent: Project[] = [];
   private session?: { project: Project; host: FileProcess };
   private busy = false;
   beforeChange?: () => Promise<void>;
@@ -97,6 +106,7 @@ export class ProjectService {
       const previous = this.session;
       const project = { ...result.data, id: randomUUID() };
       this.session = { project, host };
+      this.recent = [project, ...this.recent.filter(p => p.rootPath !== project.rootPath)].slice(0, 6);
       if (previous) await previous.host.close();
       return { ok: true, data: project };
     } finally { this.busy = false; }
@@ -109,6 +119,16 @@ export class ProjectService {
   list(id: string, filePath: string) { return this.call<Entry[]>(id, 'list', { path: filePath }); }
   read(id: string, filePath: string) { return this.call<FileBuffer>(id, 'read', { path: filePath }); }
   save(id: string, filePath: string, content: string, revision: string) { return this.call<FileBuffer>(id, 'save', { path: filePath, content, revision }); }
+  create(id: string, filePath: string) { return this.call<FileBuffer>(id, 'create', { path: filePath }); }
+  createFolder(id: string, filePath: string) { return this.call<{ path: string; kind: 'folder' }>(id, 'create_folder', { path: filePath }); }
+  inspectRename(id: string, filePath: string) { return this.call<RenameInspection>(id, 'inspect_rename', { path: filePath }); }
+  rename(id: string, filePath: string, destination: string, revision: string) { return this.call<{ path: string; kind: 'folder' | 'file' }>(id, 'rename', { path: filePath, destination, revision }); }
+  recentProjects(): Result<Project[]> { return { ok: true, data: this.recent.map(p => ({ ...p })) }; }
+  openRecent(id: string): Promise<Result<Project>> {
+    const project = this.recent.find(p => p.id === id);
+    return project ? this.open(project.rootPath) : Promise.resolve(error('This recent project is no longer in the current session. Use Open Project.'));
+  }
+  search(id: string, query: string) { return this.call<Entry[]>(id, 'search', { query }); }
   observe(id: string) { return this.call<ProjectObservation>(id, 'observe'); }
   async close() { const current = this.session; this.session = undefined; await current?.host.close(); }
 }

@@ -24,7 +24,7 @@ it('requires a visible discard decision before offering runtime reload and permi
 it('starts with truthful local-project guidance and no fixture or fabricated activity', async () => {
   render(<App />);
   expect(screen.getByRole('list', { name: 'Getting started' })).toBeTruthy();
-  expect(screen.getByText('Open a Python project folder.')).toBeTruthy();
+  expect(screen.getByText('Open a project to inspect its real files and capabilities.')).toBeTruthy();
   expect(await screen.findByText(/Desktop connection unavailable. Close this window/)).toBeTruthy();
   expect(screen.queryByText('TEST FIXTURE')).toBeNull();
   expect(screen.queryByRole('tab')).toBeNull();

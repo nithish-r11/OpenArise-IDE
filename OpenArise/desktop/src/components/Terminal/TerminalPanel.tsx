@@ -35,14 +35,14 @@ export function TerminalPanel({ terminal, blocked, revisions, fileError }: {
           {sessions.map((s, i) => <button role="tab" aria-selected={active?.id === s.id} key={s.id} onClick={() => terminal.setActive(s.id)}>Terminal {i + 1}<span className={'process-state ' + s.state}>{s.state}</span></button>)}
         </div>
         {active ? <>
-          <div className="terminal-tools"><span title={'Session: ' + active.id + '\nRoot: ' + active.root + '\nStarted: ' + (active.startedAt ?? 'Not started')}>{active.command || 'Ready for a command'} · {active.state}{active.exitCode !== null ? ' · exit ' + active.exitCode : ''}{active.testResult ? ' · pytest ' + active.testResult : ''}</span>
+          <div className="terminal-tools"><span title={'Session: ' + active.id + '\nRoot: ' + active.root + '\nStarted: ' + (active.startedAt ?? 'Not started')}>{active.command || 'Ready for a command'} · {active.state}{active.exitCode !== null ? ' · exit ' + active.exitCode : ''}{active.testResult ? ' · ' + (active.command === 'pytest' ? 'pytest' : 'tests') + ' ' + active.testResult : ''}</span>
             <button disabled={!running || terminal.pending} onClick={() => control('stop')}>Stop</button>
             <button disabled={terminal.pending} onClick={() => control('clear')}>Clear</button>
             <button disabled={terminal.pending} onClick={() => control('restart')}>Restart</button>
             <button disabled={terminal.pending} onClick={() => control('close')}>Close</button>
           </div>
           <pre className="terminal-output" ref={output} aria-label="Terminal output">{active.truncated && <span className="subtle">Earlier output truncated (128 KiB limit).{'\n'}</span>}{active.output.map((part, i) => <span className={part.stream} key={i}>{part.text}</span>)}</pre>
-        </> : <div className="terminal-empty">Run a saved Python file or open a session.<small>Commands: python --version · python &lt;opened file.py&gt; · pytest</small></div>}
+        </> : <div className="terminal-empty">Run a saved Python file or select a detected project command.<small>Typed commands: python --version · python &lt;opened file.py&gt; · pytest. Node scripts use the approved Project commands controls.</small></div>}
         <form className="terminal-input" onSubmit={event => { event.preventDefault(); execute(); }}><span>›_</span><input aria-label="Terminal command" maxLength={2100} value={input} onChange={event => setInput(event.target.value)} placeholder="python --version" disabled={!terminal.snapshot || running || terminal.pending} /><button disabled={!terminal.snapshot || running || terminal.pending || blocked}>Execute</button></form>
       </>}
       {(terminal.error || blocked) && <p className="terminal-error" role="alert">{terminal.error || 'Save or discard unsaved changes and resolve save errors before running.'}</p>}

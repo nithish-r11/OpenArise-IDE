@@ -27,9 +27,22 @@ def write_call(call_id="write-1", path="result.py"):
                     arguments={"path": path, "content": "answer = 42\n"})
 
 
+def run_with_approvals(agent, request):
+    """Execution tests use the same explicit decisions as the production path."""
+    response = agent.process_request(request)
+    decisions = 0
+    while response.pending_action:
+        decisions += 1
+        assert decisions <= 20
+        pending = response.pending_action
+        agent.approve_action(request.request_id, pending.tool_call_id)
+        response = agent.resume_request(request.request_id, pending.tool_call_id)
+    return response
+
+
 def test_real_write_preserves_result_identity_and_reaches_gate(tmp_path):
     agent, llm = make_agent(tmp_path, [write_call()], PermissionManager(test_mode=True))
-    response = agent.process_request(AgentRequest(request_id="request-1", prompt="Create result.py"))
+    response = run_with_approvals(agent, AgentRequest(request_id="request-1", prompt="Create result.py"))
     assert (tmp_path / "result.py").read_text() == "answer = 42\n"
     assert response.status == "unverified"
     assert response.current_state == "COMPLETED"
@@ -50,7 +63,7 @@ def test_complete_offline_request_tool_test_evidence_gate_flow(tmp_path):
     calls = [write_call(), ToolCall(tool_name="execute_tests", tool_call_id="test-1",
                                     arguments={"test_path": "test_answer.py"})]
     agent, _ = make_agent(tmp_path, calls, PermissionManager(test_mode=True))
-    response = agent.process_request(AgentRequest(prompt="Implement answer = 42 and pass its test"))
+    response = run_with_approvals(agent, AgentRequest(prompt="Implement answer = 42 and pass its test"))
     assert response.status == "success"
     assert response.data["verification"]["overall_status"] == "VERIFIED"
     assert response.data["verification"]["report"]["tests_executed"] == 1
@@ -66,7 +79,7 @@ def test_failed_real_tests_are_contradictory_and_never_success(tmp_path):
     agent, _ = make_agent(tmp_path, [ToolCall(tool_name="execute_tests", tool_call_id="fail",
                                              arguments={"test_path": "test_fail.py"})],
                           PermissionManager(test_mode=True))
-    response = agent.process_request(AgentRequest(prompt="Pass the existing test"))
+    response = run_with_approvals(agent, AgentRequest(prompt="Pass the existing test"))
     assert response.status == "failure"
     result = response.data["tool_results"][0]
     assert not result["success"] and result["exit_code"] == 1
@@ -92,7 +105,7 @@ def test_nonzero_python_exit_is_failure_not_success(tmp_path):
     agent, _ = make_agent(tmp_path, [ToolCall(tool_name="execute_python", tool_call_id="python",
                                              arguments={"script_path": "fail.py"})],
                           PermissionManager(test_mode=True))
-    response = agent.process_request(AgentRequest(prompt="Execute fail.py"))
+    response = run_with_approvals(agent, AgentRequest(prompt="Execute fail.py"))
     assert response.status == "failure"
     assert response.data["tool_results"][0]["exit_code"] == 7
     assert response.data["verification"]["overall_status"] == "NOT_VERIFIED"
@@ -153,7 +166,7 @@ def test_two_pending_tools_do_not_rerun_completed_prefix(tmp_path):
 def test_request_replay_is_idempotent_and_conflicts_are_rejected(tmp_path):
     agent, llm = make_agent(tmp_path, [write_call()], PermissionManager(test_mode=True))
     request = AgentRequest(request_id="replay", prompt="Write the file")
-    first = agent.process_request(request)
+    first = run_with_approvals(agent, request)
     assert agent.process_request(request) == first
     assert llm.action_requests == 1
     with pytest.raises(AgentLifecycleError):
@@ -213,7 +226,7 @@ def test_multiple_requirements_receive_only_explicitly_associated_evidence(tmp_p
             requirement_ids=[requirements[0]["requirement_id"]],
         )])
     agent, _ = make_agent(tmp_path, action, PermissionManager(test_mode=True))
-    response = agent.process_request(AgentRequest(prompt="- Pass the first test\n- Implement another feature"))
+    response = run_with_approvals(agent, AgentRequest(prompt="- Pass the first test\n- Implement another feature"))
     results = response.data["verification"]["requirement_results"]
     assert [r["status"] for r in results] == ["VERIFIED", "INCONCLUSIVE"]
     assert response.status == "unverified"
@@ -221,7 +234,7 @@ def test_multiple_requirements_receive_only_explicitly_associated_evidence(tmp_p
 
 def test_new_request_does_not_inherit_previous_evidence(tmp_path):
     agent, llm = make_agent(tmp_path, [write_call()], PermissionManager(test_mode=True))
-    first = agent.process_request(AgentRequest(prompt="Write"))
+    first = run_with_approvals(agent, AgentRequest(prompt="Write"))
     llm.action = AgentAction(action_type="respond", message="No execution")
     second = agent.process_request(AgentRequest(prompt="Another request"))
     assert first.data["evidence"] and second.data["evidence"] == []
@@ -280,7 +293,7 @@ def test_mutation_invalidates_prior_test_proof_until_retested(tmp_path, retest):
     if retest:
         calls.append(ToolCall(tool_name="execute_tests", tool_call_id="after", arguments={"test_path": "test_feature.py"}))
     agent, _ = make_agent(tmp_path, calls, PermissionManager(test_mode=True))
-    response = agent.process_request(AgentRequest(prompt="Maintain the tested numeric value"))
+    response = run_with_approvals(agent, AgentRequest(prompt="Maintain the tested numeric value"))
     assert response.status == ("success" if retest else "unverified")
     assert response.data["evidence"][0]["result"]["stale"]
     assert response.data["verification"]["overall_status"] == ("VERIFIED" if retest else "INCONCLUSIVE")

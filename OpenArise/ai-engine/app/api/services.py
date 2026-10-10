@@ -97,6 +97,10 @@ class ProjectWorkspaceService:
     def get_project_state(self):
         return SuccessResponse(data=self._state().model_dump(mode="json"))
 
+    def get_project_capabilities(self):
+        from app.project.capabilities import detect_capabilities
+        return SuccessResponse(data=detect_capabilities(self.project_root, self._state()))
+
     def get_blueprint(self):
         self._ensure_open()
         return SuccessResponse(data=self.current_blueprint.model_dump(mode="json"))
@@ -246,6 +250,8 @@ class ProjectWorkspaceService:
         from app.context.adapter import ProjectIntelligenceContextAdapter
         merged = dict(context_data or {})
         merged.update(ProjectIntelligenceContextAdapter(self).build_bounded_context())
+        from app.context.project import build_project_context
+        merged["project_context"] = build_project_context(self.project_root, self._state())
         response = self._call_agent("process_request", AgentRequest(
             request_id=request_id, prompt=prompt, context_data=merged
         ))

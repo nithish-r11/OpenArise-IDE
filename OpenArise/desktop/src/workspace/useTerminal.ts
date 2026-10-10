@@ -37,7 +37,7 @@ export function useTerminal(project: Project | undefined, bridge?: TerminalBridg
     busy.current = true; setPending(true); setError('');
     try {
       let sessionId = request.sessionId;
-      if (request.operation === 'execute' && !sessionId) {
+      if (['execute', 'executeCapability'].includes(request.operation) && !sessionId) {
         const data = await send({ operation: 'create' });
         sessionId = data?.sessions.at(-1)?.id;
         if (!sessionId) return;

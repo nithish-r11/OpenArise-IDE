@@ -4,11 +4,22 @@ import 'monaco-editor/editor/standalone/browser/quickAccess/standaloneGotoLineQu
 import { useEffect, useRef } from 'react';
 import * as monaco from 'monaco-editor/editor/editor.api.js';
 import 'monaco-editor/languages/definitions/python/register.js';
+import 'monaco-editor/languages/definitions/typescript/register.js';
+import 'monaco-editor/languages/definitions/javascript/register.js';
+import 'monaco-editor/languages/features/json/register.js';
+import 'monaco-editor/languages/definitions/html/register.js';
+import 'monaco-editor/languages/definitions/css/register.js';
+import 'monaco-editor/languages/definitions/markdown/register.js';
+import 'monaco-editor/languages/definitions/yaml/register.js';
+import 'monaco-editor/languages/definitions/ini/register.js';
+import 'monaco-editor/languages/definitions/xml/register.js';
+import { editorLanguage } from './language';
 import EditorWorker from 'monaco-editor/editor/editor.worker.js?worker&inline';
+import JsonWorker from 'monaco-editor/languages/features/json/json.worker.js?worker&inline';
 import type { EditorTab } from '../workspace/useWorkspace';
 
 // Local bundled worker: no CDN, remote script, Node integration or webSecurity changes.
-self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
+self.MonacoEnvironment = { getWorker: (_module, label) => label === 'json' ? new JsonWorker() : new EditorWorker() };
 monaco.editor.defineTheme('openarise', {
   base: 'vs-dark', inherit: true,
   rules: [
@@ -24,14 +35,15 @@ monaco.editor.defineTheme('openarise', {
     'scrollbarSlider.background': '#32456366',
   },
 });
-export default function MonacoEditor({ tabs, active, onChange, onSave }: {
-  tabs: EditorTab[]; active: string; onChange: (path: string, content: string) => void; onSave: (path: string) => void;
+export default function MonacoEditor({ tabs, active, onChange, onSave, locked = false }: {
+  tabs: EditorTab[]; active: string; onChange: (path: string, content: string) => void; onSave: (path: string) => void; locked?: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const instance = useRef<monaco.editor.IStandaloneCodeEditor | undefined>(undefined);
   const models = useRef(new Map<string, monaco.editor.ITextModel>());
   const views = useRef(new Map<string, monaco.editor.ICodeEditorViewState>());
   const previous = useRef('');
+  const synchronizing = useRef(false);
   const callbacks = useRef({ onChange, onSave, active });
   callbacks.current = { onChange, onSave, active };
   useEffect(() => {
@@ -44,6 +56,7 @@ export default function MonacoEditor({ tabs, active, onChange, onSave }: {
     });
     instance.current = editor;
     const change = editor.onDidChangeModelContent(() => {
+      if (synchronizing.current) return;
       const model = editor.getModel();
       const entry = [...models.current].find(([, value]) => value === model);
       if (entry && model) callbacks.current.onChange(entry[0], model.getValue());
@@ -68,8 +81,15 @@ export default function MonacoEditor({ tabs, active, onChange, onSave }: {
     if (!tab) { editor.setModel(null); return; }
     let model = models.current.get(active);
     if (!model) {
-      model = monaco.editor.createModel(tab.content, /\.pyw?$/i.test(active) ? 'python' : 'plaintext');
+      model = monaco.editor.createModel(tab.content, editorLanguage(active));
+      // File reads normalize text to LF. Empty/single-line models otherwise
+      // inherit Windows CRLF, forcing a full model reset on their first save.
+      model.setEOL(monaco.editor.EndOfLineSequence.LF);
       models.current.set(active, model);
+    }
+    if (model.getValue() !== tab.content) {
+      synchronizing.current = true;
+      try { model.setValue(tab.content); } finally { synchronizing.current = false; }
     }
     if (editor.getModel() !== model) {
       const view = editor.saveViewState();
@@ -78,7 +98,7 @@ export default function MonacoEditor({ tabs, active, onChange, onSave }: {
       const saved = views.current.get(active); if (saved) editor.restoreViewState(saved);
       previous.current = active; editor.focus();
     }
-    editor.updateOptions({ readOnly: tab.readOnly });
-  }, [tabs, active]);
+    editor.updateOptions({ readOnly: tab.readOnly || locked });
+  }, [tabs, active, locked]);
   return <div className="monaco-surface" ref={container} data-testid="monaco-editor" />;
 }

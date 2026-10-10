@@ -24,6 +24,7 @@ it.each([['EXECUTING', 'running'], ['RECOVERING', 'recovering'], ['VERIFYING', '
   fireEvent.click(screen.getByRole('button', { name: 'Return to current result' })); expect(document.querySelector('.arise-activity')?.getAttribute('data-state')).toBe('unverified');
 });
 it('does not turn dispatch success without CompletionGate verification into verified completion', () => { const i = item('success'); i.result!.data.verification!.overall_status = 'INCONCLUSIVE'; expect(activityPresentation(i)).toMatchObject({ state: 'unverified', verified: false }); });
+it('labels a returned read-only answer without turning it into verified execution', () => { const i = item(); i.result!.data.model_response = 'main.py multiplies two numbers.'; i.result!.data.tool_results = []; expect(activityPresentation(i)).toMatchObject({ state: 'unverified', label: 'Answer returned', verified: false }); });
 it('keeps explicit unverified even with contradictory verification metadata', () => { const i = item(); i.result!.data.verification!.overall_status = 'VERIFIED'; expect(activityPresentation(i)).toMatchObject({ state: 'unverified', verified: false }); });
 it('unavailable takes priority over an earlier successful result', () => { const i = item('success'); i.error = 'transport unavailable'; expect(activityPresentation(i)).toMatchObject({ state: 'unavailable', provenance: 'UNAVAILABLE_ACTIVITY', verified: false }); });
 it('retains timestamps, IDs and safe tool outcomes without arbitrary metadata', () => {

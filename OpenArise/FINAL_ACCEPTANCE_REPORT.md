@@ -1,5 +1,23 @@
 # Final failure-path UI acceptance
 
+**October 9 current-source recovery continuation:** see
+[desktop/FINAL_RECOVERY_ACCEPTANCE_REPORT.md](desktop/FINAL_RECOVERY_ACCEPTANCE_REPORT.md).
+Real ordered Qwen recovery and fresh CompletionGate VERIFIED are established;
+stale evidence and failed retest refuse verification. The frontend write/command
+denial rerun passed at the normal 180-second timeout. Backend: **278 passed**;
+desktop: **331** (276 unchanged Vitest carried forward, 55 host tests rerun).
+Latest NSIS build, installed current-source payload and one visible normal-launch
+window and ordinary uninstall are VERIFIED. Older packaged
+acceptance below is historical, not proof for this new backend source.
+
+**Historical packaged checkpoint:** the acceptance and release hashes below predate
+the subsequent October 8 product-quality implementation. Latest working-tree
+source validation and limitations are tracked in
+[desktop/PRODUCT_QUALITY_REPORT.md](desktop/PRODUCT_QUALITY_REPORT.md).
+The October 9 source improvements and current validation are tracked in
+[desktop/PRODUCT_IMPROVEMENT_REPORT.md](desktop/PRODUCT_IMPROVEMENT_REPORT.md).
+These old packages must not be described as containing either source update.
+
 Review: **October 8, 2026 (Asia/Calcutta)**. Recorded validation timestamps retain
 actual October 7–8 dates. This section supersedes the historical report below.
 

@@ -45,7 +45,11 @@ class IndependentVerifier:
         recovery = self.ledger.get_evidence(record.result.get("recovery_evidence"))
         if not proof or not recovery or proof.requirement_id != record.requirement_id or recovery.requirement_id != record.requirement_id:
             return False
-        return (proof.evidence_type == EvidenceType.TEST_PASS and proof.strength == EvidenceStrength.DIRECT
+        return (proof.evidence_type in (EvidenceType.TEST_PASS, EvidenceType.BUILD_PASS) and proof.strength == EvidenceStrength.DIRECT
+                and (record.evidence_type != EvidenceType.BUILD_FAIL or proof.evidence_type == EvidenceType.BUILD_PASS)
+                and (record.evidence_type != EvidenceType.TEST_FAIL or proof.evidence_type == EvidenceType.TEST_PASS)
+                and (record.source not in ("execute_project_tests", "build_project") or
+                     record.source == proof.source and (record.result.get("output") or {}).get("command_id") == (proof.result.get("output") or {}).get("command_id"))
                 and proof.result.get("success") is True and proof.result.get("exit_code") == 0
                 and proof.result.get("executed") is True and not proof.result.get("stale") and not proof.result.get("superseded")
                 and proof.result.get("project_snapshot") is not None
@@ -62,6 +66,18 @@ class IndependentVerifier:
         direct = []
         supporting = []
         missing = []
+        for criterion in req.acceptance_criteria:
+            if criterion.startswith('required_tool_count:'):
+                _, name, count = criterion.split(':', 2)
+                actual = len({record.tool_call_id or record.evidence_id for record in evidence
+                              if record.source == name and record.result.get('executed') is True})
+                if actual < int(count):
+                    missing.append(f'Requested {name} executions: {actual}/{count}.')
+            elif criterion == 'required_recovery' and not any(
+                record.evidence_type == EvidenceType.RECOVERY_RESULT and record.result.get('status') == 'RECOVERED'
+                and self.ledger.get_evidence(record.result.get('proof_id')) for record in evidence
+            ):
+                missing.append('Requested recovery has no successful recovery/retest evidence.')
         for ref in req.evidence_references:
             record = self.ledger.get_evidence(ref)
             if record is None or record.requirement_id != req.requirement_id:
@@ -70,14 +86,14 @@ class IndependentVerifier:
             facts = record.result
             if facts.get("resolved_by") and self.resolution_is_valid(record):
                 continue
-            if facts.get("superseded") and record.evidence_type == EvidenceType.TEST_PASS:
+            if facts.get("superseded") and record.evidence_type in (EvidenceType.TEST_PASS, EvidenceType.BUILD_PASS):
                 continue
             if "project_snapshot" in facts and facts.get("success") is True and (
                     facts["project_snapshot"] is None or facts["project_snapshot"] != project_snapshot(self.project_root)):
                 facts["stale"] = True
                 missing.append(f"Changed project since execution: {record.evidence_id}")
                 continue
-            if (record.evidence_type == EvidenceType.TEST_FAIL
+            if (record.evidence_type in (EvidenceType.TEST_FAIL, EvidenceType.BUILD_FAIL)
                     or record.strength == EvidenceStrength.CONTRADICTORY
                     or facts.get("success") is False
                     or facts.get("exit_code") not in (None, 0)):
@@ -99,7 +115,7 @@ class IndependentVerifier:
                     missing.append(f"Unconfirmed symbol: {record.source}")
                     continue
             if record.strength == EvidenceStrength.DIRECT and record.evidence_type in (
-                EvidenceType.TEST_PASS, EvidenceType.FILE_EXISTS, EvidenceType.SYMBOL_EXISTS,
+                EvidenceType.TEST_PASS, EvidenceType.BUILD_PASS, EvidenceType.FILE_EXISTS, EvidenceType.SYMBOL_EXISTS,
             ):
                 direct.append(record.evidence_id)
             else:

@@ -6,6 +6,7 @@ import { parseCommand, validTerminalRequest } from '../shared/terminal-ipc';
 import type { Result } from '../src/types/project';
 import type { PythonEnvironment, TerminalRequest, TerminalSession, TerminalSnapshot } from '../src/types/terminal';
 import type { ProjectService } from './project-service';
+import type { ProjectCommand } from '../shared/capabilities';
 const unavailable = (message: string): Result<never> => ({ ok: false, code: 'unavailable', message });
 type Owned = { data: TerminalSession; child?: ChildProcess; done?: Promise<void>; cancel: boolean };
 export class TerminalService {
@@ -14,7 +15,8 @@ export class TerminalService {
   private environmentProject = '';
   private queue: Promise<unknown> = Promise.resolve();
   private closed = false;
-  constructor(private projects: ProjectService, private dirty: { value: boolean }) {}
+  constructor(private projects: ProjectService, private dirty: { value: boolean },
+    private approveScript: (command: ProjectCommand) => Promise<boolean> = async () => false) {}
   private serial<T>(work: () => Promise<T>): Promise<T> {
     const next = this.queue.then(work, work); this.queue = next.catch(() => {}); return next;
   }
@@ -76,20 +78,34 @@ export class TerminalService {
       if (request.operation === 'clear') { owned.data.output = []; owned.data.truncated = false; return this.snapshot(); }
       if (owned.child) return unavailable('Stop the running command before starting another.');
       if (this.dirty.value) return unavailable('Save or discard all unsaved changes before running a command.');
-      await this.inspect(project.id, project.rootPath);
-      if (this.environment.status !== 'ready') return unavailable(this.environment.message);
-      const command = parseCommand(request.command)!;
-      let args: string[];
-      if (command.kind === 'run') {
-        const validated = await this.projects.call<{ path: string }>(project.id, 'validate_run', { path: command.path, revision: request.revision });
-        if (!validated.ok) return validated;
-        args = ['-u', validated.data.path];
-      } else args = command.kind === 'pytest' ? ['-m', 'pytest'] : ['--version'];
+      if (this.projects.canChange && !this.projects.canChange()) return unavailable('Finish or cancel the active AI request before running a manual command.');
+      let args: string[], executable = this.environment.executable, directory = project.rootPath, label = request.command!, test = false;
+      if (request.operation === 'executeCapability') {
+        const descriptor = await this.projects.call<ProjectCommand>(project.id, 'command_capability', { capabilityId: request.capabilityId });
+        if (!descriptor.ok) return descriptor;
+        if (!descriptor.data.supported) return unavailable(descriptor.data.reason);
+        if (!await this.approveScript(descriptor.data)) return { ok: false, code: 'permission_required', message: 'Project script denied or cancelled. No command ran.' };
+        const prepared = await this.projects.call<{ executable: string; arguments: string[]; directory: string; label: string; test: boolean }>(project.id, 'prepare_command', { capabilityId: request.capabilityId, revision: descriptor.data.revision, approved: true });
+        if (!prepared.ok) return prepared;
+        ({ executable, directory, label, test } = prepared.data); args = prepared.data.arguments;
+      } else {
+        await this.inspect(project.id, project.rootPath);
+        if (this.environment.status !== 'ready') return unavailable(this.environment.message);
+        executable = this.environment.executable;
+        const parsed = parseCommand(request.command)!;
+        test = parsed.kind === 'pytest';
+        if (parsed.kind === 'run') {
+          const validated = await this.projects.call<{ path: string }>(project.id, 'validate_run', { path: parsed.path, revision: request.revision });
+          if (!validated.ok) return validated;
+          args = ['-u', validated.data.path];
+        } else args = parsed.kind === 'pytest' ? ['-m', 'pytest'] : ['--version'];
+      }
       if (this.dirty.value || this.projects.current?.id !== project.id) return unavailable('Project or saved state changed; review it before running.');
+      if (this.projects.canChange && !this.projects.canChange()) return unavailable('An AI request started while this command was being reviewed. Resolve it before running.');
       Object.assign(owned.data, { state: 'starting', startedAt: new Date().toISOString(), exitCode: null,
-        command: request.command!, output: [], truncated: false, problem: '', testResult: command.kind === 'pytest' ? 'running' : null });
+        command: label, output: [], truncated: false, problem: '', testResult: test ? 'running' : null });
       owned.cancel = false;
-      const child = this.spawn([this.environment.executable, ...args], project.rootPath);
+      const child = this.spawn([executable, ...args], directory);
       owned.child = child;
       const append = (stream: 'stdout' | 'stderr', text: string) => {
         const output = owned.data.output;
@@ -115,8 +131,8 @@ export class TerminalService {
           owned.child = undefined;
           owned.data.exitCode = code;
           owned.data.state = owned.cancel ? 'stopped' : code === 0 ? 'exited' : 'failed';
-          if (command.kind === 'pytest') owned.data.testResult = owned.cancel ? null : code === 0 ? 'passed' : 'failed';
-          if (!owned.cancel && code !== 0) owned.data.problem ||= (command.kind === 'pytest' ? 'pytest' : 'Python') + ' exited with code ' + String(code) + '. See terminal output for details.';
+          if (test) owned.data.testResult = owned.cancel ? null : code === 0 ? 'passed' : 'failed';
+          if (!owned.cancel && code !== 0) owned.data.problem ||= label + ' exited with code ' + String(code) + '. See terminal output for details.';
           resolve();
         });
       });

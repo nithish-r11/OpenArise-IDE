@@ -1,8 +1,30 @@
 # OpenArise desktop
 
-Electron, React, TypeScript, Vite and Monaco, with Project Explorer, editing,
-controlled Python execution, pytest, a session-based terminal, the AI workspace
-and Project Intelligence.
+**Current recovery acceptance (October 9):** real Qwen ordered failure/repair/retest
+reached CompletionGate VERIFIED, while stale or failed proof refused completion.
+Frontend write and command denial passed at the unchanged 180-second timeout.
+Current tests: **331 desktop** (276 unchanged Vitest carried forward plus 55
+Python-host tests rerun) and **278 backend passed**. Latest NSIS build, per-user
+install, installed payload, one visible normal launch and ordinary uninstall
+are VERIFIED.
+See [FINAL_RECOVERY_ACCEPTANCE_REPORT.md](FINAL_RECOVERY_ACCEPTANCE_REPORT.md)
+for exact evidence, CPU timeout limits and release status. Older counts and
+packages below are historical.
+
+Electron, React, TypeScript, Vite and Monaco, with Project Explorer, source editing,
+controlled Python execution, pytest, approved npm build/test scripts, a session-based
+terminal, the AI workspace and Project Intelligence.
+
+**October 9 product improvement:** the AI panel presents a concise answer or result,
+with technical verification/recovery details available under **Details**. Explorer
+adds guarded folder creation and rename. The existing agent can request detected
+npm test/build scripts through the existing approval and verification pipeline.
+See [PRODUCT_IMPROVEMENT_REPORT.md](PRODUCT_IMPROVEMENT_REPORT.md) for that
+earlier implementation's validation and limits. Its historical regression was
+**321 desktop tests (271 Vitest +
+50 Python host) and 216 backend tests passed**. The
+[October 8 audit](PRODUCT_QUALITY_REPORT.md) and packaged acceptance below are
+historical; see the current report above for the rebuilt NSIS and other artifact limits.
 The desktop uses the existing backend contracts. October 6 adds configurable Ollama defaults, answer-only requests, retained permission-gated recovery and fresh execution evidence. The existing agent, permission manager, recovery engine and CompletionGate remain authoritative.
 
 ## Run
@@ -33,16 +55,16 @@ launching. The build copies the backend source and an isolated Python 3.13
 runtime into Electron resources; it does not rely on the source checkout after
 packaging. The existing OpenArise orbit image supplies the Windows icon.
 
-`npm run package:win` targets an NSIS installer. The failure-state fix was followed
-by fresh ZIP, portable and NSIS builds after source tests/build/smokes. All current
-payloads match the final source and pass bundled Python/pytest checks. This latest
+`npm run package:win` targets an NSIS installer. At the historical failure-state checkpoint, the fix was followed
+by fresh ZIP, portable and NSIS builds after source tests/build/smokes. Those
+payloads match that checkpoint's source and pass bundled Python/pytest checks. That
 ZIP's normal executable launch is BLOCKED by Application Control Enterprise
-signing policy. The latest portable wrapper's normal one-window launch and NSIS
+signing policy. At that checkpoint, the portable wrapper's normal one-window launch and NSIS
 install/normal launch/uninstall are VERIFIED on this host. These are separate
-actual outcomes; earlier package launch results are not reused. The current MSI
+actual outcomes; earlier package launch results were not reused. That checkpoint's MSI
 required ICE validation is BLOCKED with WiX LGHT1105: "Validation could not run
 due to system policy." No validated MSI is offered; no policy/validation bypass.
-Current hashes, evidence scopes and remaining acceptance items are in
+Historical hashes, evidence scopes and remaining acceptance items are in
 [RELEASE_VALIDATION.md](RELEASE_VALIDATION.md). Publisher signing and clean
 Windows acceptance remain NOT VERIFIED. Old candidates remain in ignored
 `.packaging/phase8-blocked-artifacts/`.
@@ -56,15 +78,28 @@ application must not present those requests as completed.
 ## Workspace
 
 Choose **Open Project** using the native folder picker. Expand Explorer folders
-and open files in Monaco. Python files support Save and Ctrl/Cmd+S; other UTF-8
-text is read-only. Monaco includes highlighting, line numbers, minimap, Find,
+and open files in Monaco. Supported UTF-8 source/config/document files support
+Save and Ctrl/Cmd+S: Python, JavaScript/JSX, TypeScript/TSX, HTML, CSS/SCSS, JSON,
+TOML, YAML, INI/CFG, TXT, Markdown and SVG. Other permitted text is read-only.
+Monaco includes highlighting, line numbers, minimap, Find,
 Go to Line, folding and per-tab undo/view state. A language server is not included.
 
 Explorer loads lazily. Runtime, dependency, Git and protected paths are excluded.
 Files over 2 MiB, binary files, symbolic links, junctions and multiple hard links
 are rejected. Each directory listing is limited to 2,000 entries. Collapse and
-expand to refresh a folder. **Refresh project state** requests a factual snapshot
-from the existing ProjectWorkspaceService; it is not a watcher.
+expand to refresh a folder. **Refresh Explorer** reloads expanded folders and
+requests a factual snapshot from the existing ProjectWorkspaceService; it is not
+a watcher. Search finds actual filenames (Ctrl/Cmd+P); it is not full-text search.
+Results are limited to 200 with a refine-search notice. **New file** creates an
+empty supported UTF-8 file in an existing folder and never replaces an existing
+file. **New folder** creates one folder beneath an existing parent. **Rename**
+reviews the selected file/folder and rechecks its exact disk revision; save or
+discard all unsaved editor changes first. An existing destination is never replaced,
+and protected or linked descendants prevent folder rename. Rename is implemented
+for Windows; other platforms fail closed. **Reload** rereads disk into Monaco;
+dirty buffers require explicit discard.
+Recent projects contain at most six native-picked roots in main-process session
+memory; renderer requests use their retained IDs. They do not persist across exit.
 
 Saving uses the existing backend ReadFileTool/WriteFileTool and production
 PermissionManager. The explicit human Save grants a one-use approval only for
@@ -73,9 +108,39 @@ writer or automatic agent approvals were added.
 
 SHA-256 revisions are checked against the retained open revision and current disk
 bytes. Conflicts retain the editor buffer. Edits made during a save remain dirty.
-Closing dirty tabs or the window requires an explicit discard choice; project
+Writes use atomic replacement of existing files and exclusive creation for new
+files. Closing dirty tabs or the window requires an explicit discard choice; project
 switching is blocked while buffers are dirty. There is no autosave, Save As,
 force overwrite, unsaved-buffer recovery or durable buffer storage.
+
+## Project capabilities and approved scripts
+
+The backend detects React, Vite, TypeScript/JavaScript, HTML/CSS, Python,
+FastAPI/Flask/Django, Node.js/Express and common manifests/lockfiles. These are
+static observations of source/imports/declarations; they do not prove installed
+dependencies, a working server or framework-specific language tooling.
+Entry points and run commands are explicitly labelled candidates.
+
+Detected npm `test` and `build` scripts can run from **Project commands**. Review
+the native approval dialog's folder and script before allowing project-defined
+code with your user privileges. Main rechecks the manifest revision after approval,
+uses the installed Node/npm runtime with fixed arguments and project cwd, and
+disables npm pre/post lifecycle scripts. There is no dependency installation,
+unrestricted renderer shell, executable picker or arbitrary typed Node command.
+Output and process lifetime use the existing bounded, supervised terminal and Stop.
+pnpm/yarn are detected but execution is unavailable; no npm fallback is attempted.
+npm `dev`/`start` are displayed as candidates; execution is not enabled. Manual
+test/build success is distinct from agent evidence and CompletionGate verification.
+
+For AI requests, **Make changes** exposes the existing permission workflow for
+`execute_project_tests` and `build_project`. The permission card shows the exact
+observed npm script and manifest scope. If its manifest revision is unavailable or
+changed, approval is disabled or execution is refused; refresh and review again.
+The backend rechecks the script before execution, captures bounded actual output,
+and can retest the same validation command after supported recovery. A passing
+build creates build evidence and does not claim tests ran. Only the backend gate
+can establish the requested result. **Answer only** inspects bounded actual project
+context without executing tools; a returned answer is not test verification.
 
 ## Python environment
 
@@ -172,8 +237,8 @@ POSIX programs can detach from a process group; adversarial code is not containe
 Do not interpret a clean exit as safety, correctness or backend verification.
 
 Path/revision checks are not filesystem locks. A concurrent external mutation
-between validation and interpreter open is a remaining race. Save retains the
-existing writer's non-atomic behavior; an interrupted write may be partial.
+between validation and interpreter open is a remaining race. Existing-file saves
+use atomic replacement; new-file saves use exclusive creation.
 No backend safety policies for autonomous AI actions were changed.
 
 ## Electron boundary and identity
@@ -226,7 +291,7 @@ all worked. That human report is recorded separately from unattended evidence.
 Screenshots and smoke profiles live in OS temp or ignored packaging directories.
 
 Vite retains the non-failing size warning for the local lazy Monaco bundle.
-See RELEASE_VALIDATION.md for current package and real-flow evidence. PHASE6_REPORT.md records the earlier Phase 6 baseline.
+See PRODUCT_IMPROVEMENT_REPORT.md for current source validation, PRODUCT_QUALITY_REPORT.md for the October 8 audit, and RELEASE_VALIDATION.md for historical package evidence. PHASE6_REPORT.md records the earlier Phase 6 baseline.
 PHASE4_REPORT.md retains the AI workspace audit.
 PHASE3_REPORT.md retains the previous phase's audit.
 
@@ -466,11 +531,11 @@ Initial Phase 7 tests used deterministic fixtures and controlled providers; its
 historical report makes no live AI claim. October 6 separately verified real
 Qwen permission/denial/approval, recovery, fresh retest and CompletionGate VERIFIED
 through the actual source Electron application. The targeted packaged UI probe
-now also captured real recovery success and failed recovery in the latest installed
+also captured real recovery success and failed recovery in the historical installed
 application: RECOVERED / VERIFIED and FAILED / ROLLED_BACK / NOT_VERIFIED. No AI,
 tool execution, evidence or backend response fixture was used in those live runs.
 See [../FINAL_ACCEPTANCE_REPORT.md](../FINAL_ACCEPTANCE_REPORT.md)
-for current evidence and [PHASE7_REPORT.md](PHASE7_REPORT.md) for the earlier scope.
+for that packaged checkpoint's evidence and [PHASE7_REPORT.md](PHASE7_REPORT.md) for the earlier scope.
 
 ## Final desktop polish and release (Phase 8)
 
@@ -495,14 +560,14 @@ fallback with a separate discard confirmation before reload. A crashed renderer
 shows a native error. Native close and unsaved/conflict guards remain in place;
 Ctrl+R/F5 cannot reload a dirty workspace.
 
-Latest rebuilt candidates are `release/OpenArise-0.1.0-win-x64.zip`,
+Historical checkpoint artifacts are `release/OpenArise-0.1.0-win-x64.zip`,
 `release/OpenArise-0.1.0-win-x64-portable.exe` and
-`release/OpenArise-0.1.0-win-x64-setup.exe`, with current `SHA256SUMS.txt` and
+`release/OpenArise-0.1.0-win-x64-setup.exe`, with that checkpoint's `SHA256SUMS.txt` and
 `RELEASE_NOTES.txt`. Extract the complete ZIP to a writable folder and run
-`OpenArise.exe`; preserve all resources. The latest ZIP normal launch is BLOCKED
+`OpenArise.exe`; preserve all resources. That checkpoint's ZIP normal launch was BLOCKED
 by this host's Application Control policy; portable execution and NSIS
-install/launch/uninstall are VERIFIED. Contents and bundled runtime are verified.
-Current MSI required validation is BLOCKED by system policy. Real packaged Qwen success/failure UI
+install/launch/uninstall were VERIFIED. Contents and bundled runtime were verified.
+That MSI's required validation was BLOCKED by system policy. Real packaged Qwen success/failure UI
 captures are distinct from both deterministic test fixtures and historical human
 reports. Old candidates remain separately in ignored packaging storage.
 
@@ -529,14 +594,22 @@ neither helper is packaged or accessible through IPC.
 See [PHASE8_REPORT.md](PHASE8_REPORT.md) and
 [RELEASE_VALIDATION.md](RELEASE_VALIDATION.md) for exact test totals, artifact
 hashes, launch evidence, installer results and remaining acceptance items.
-**Targeted functional acceptance is VERIFIED: real packaged Ollama recovery and CompletionGate UI success/refusal. Distribution acceptance is BLOCKED by ZIP execution/MSI validation policy on this host.** No production-readiness claim is made.
+**Historical packaged functional acceptance was VERIFIED: real Ollama recovery and CompletionGate UI success/refusal. Distribution acceptance was BLOCKED by ZIP execution/MSI validation policy on this host.** These artifacts predate the product audit and require rebuilding/revalidation. No production-readiness claim is made.
 ## Real Ollama integration — October 6, 2026
 
 Open a Python project: the AI panel automatically loads the existing bounded
 intelligence snapshot and reports the configured Ollama model's last availability
-check. Refresh context repeats these observations; submission refreshes workspace
-state before building the bounded context. Repository source is not dumped into
-the model prompt.
+check. Refresh context rescans the workspace; submission refreshes workspace state
+before building bounded context. The backend supplies actual relative structure
+(up to 80 entries) and source/config/test excerpts (up to 16 files, 2,400 characters
+per file, 16,000 content characters total). Entry points, manifests and tests are
+prioritized. Protected, linked, binary and runtime/dependency content is omitted;
+common secret patterns and quoted secret keys are redacted. This is not exhaustive
+secret detection. Omitted/truncated/unreadable content is reported; partial context
+must not be treated as a complete project review. React receives only coverage
+counts, never the source-context payload. Actual safe file content is untrusted
+project data, not instructions. Generated answers remain INCONCLUSIVE without
+direct execution evidence.
 
 Desktop defaults are OLLAMA_HOST=http://127.0.0.1:11434,
 OLLAMA_MODEL=qwen2.5-coder:7b and OLLAMA_TIMEOUT_SECONDS=180.
@@ -584,7 +657,7 @@ Failed proof stays linked to actual fresh retest/recovery records, not erased.
 See [OLLAMA_INTEGRATION_REPORT.md](OLLAMA_INTEGRATION_REPORT.md) and
 [../FINAL_ACCEPTANCE_REPORT.md](../FINAL_ACCEPTANCE_REPORT.md) for exact evidence.
 
-Targeted final validation: **271 desktop tests (234 Vitest + 37 host)** and
+Historical failure-fix validation: **271 desktop tests (234 Vitest + 37 host)** and
 **188 backend tests**, production build, production smoke and development smoke
 passed. Normal npm start and npm run dev each showed one visible OpenArise main
 window and closed normally. Fresh ZIP, portable and NSIS artifacts contain the
