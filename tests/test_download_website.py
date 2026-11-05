@@ -52,7 +52,9 @@ def test_2_html_structure_and_branding():
         html = f.read()
 
     assert "<!DOCTYPE html>" in html, "Missing <!DOCTYPE html>"
-    assert "<title>Download OpenArise IDE" in html, "Invalid title"
+    assert "<title>OpenArise IDE</title>" in html, "Invalid title"
+    assert 'property="og:title" content="OpenArise IDE"' in html, "Missing og:title"
+    assert 'name="twitter:title" content="OpenArise IDE"' in html, "Missing twitter:title"
     assert 'rel="icon"' in html and "openarise.ico" in html, "Missing favicon link"
     assert "OpenArise IDE" in html, "Missing product name"
     assert "openarise_master.png" in html, "Missing brand logo"
