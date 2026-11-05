@@ -1,0 +1,101 @@
+{
+  "registry_version": "1.0.0",
+  "extensions": [
+    {
+      "id": "openarise.python-essentials",
+      "name": "Python Essentials",
+      "version": "1.0.0",
+      "description": "Essential Python coding tools, snippet stubs, and selection runner.",
+      "author": "OpenArise Team",
+      "category": "Programming",
+      "download_url": "file://E:/OpenArise_IDE/OpenArise_IDE/assets/extensions/openarise.python-essentials-1.0.0.oaext",
+      "package_hash": "58ed00d8b6e60fa90614828ce5a50a94ac8309d9029130f94f6b8d8872a0fa14",
+      "minimum_openarise_version": "1.0.0",
+      "entry_point": "extension.py",
+      "permissions": [
+        "commands",
+        "editor",
+        "terminal"
+      ],
+      "contributes": {
+        "snippets": [
+          {
+            "prefix": "def_async",
+            "body": "async def example():\n    pass\n",
+            "description": "Asynchronous function boilerplate"
+          },
+          {
+            "prefix": "dataclass_model",
+            "body": "from dataclasses import dataclass\n\n@dataclass\nclass Item:\n    id: str\n    name: str\n",
+            "description": "Python dataclass template"
+          }
+        ]
+      },
+      "icon": "",
+      "readme": "# Python Essentials for OpenArise IDE\n\nProvides essential development conveniences for Python developers:\n- **Run Selection in Terminal** (`Shift+F5`)\n- **Insert Docstring Stub**\n- **Add Main Block Template**\n- Async and Dataclass code snippets\n"
+    },
+    {
+      "id": "openarise.theme-dracula",
+      "name": "Dracula Official Theme",
+      "version": "1.0.0",
+      "description": "The famous Dracula dark theme palette for OpenArise IDE.",
+      "author": "Dracula Theme Org",
+      "category": "Themes",
+      "download_url": "file://E:/OpenArise_IDE/OpenArise_IDE/assets/extensions/openarise.theme-dracula-1.0.0.oaext",
+      "package_hash": "d851a3d97a9ae63b75e3f4e497b514b7161d9eedf924b1b53e856cb13358dc61",
+      "minimum_openarise_version": "1.0.0",
+      "entry_point": null,
+      "permissions": [
+        "themes"
+      ],
+      "contributes": {
+        "themes": [
+          {
+            "name": "Dracula Pro",
+            "stylesheet": "QWidget { background: #22212c; color: #f8f8f2; }\nQMainWindow, QDialog { background: #22212c; }\nQMenuBar, QMenu { background: #282a36; color: #f8f8f2; }\nQToolBar { background: #282a36; border: 0; }\nQPushButton { background: #454158; color: #f8f8f2; border: 1px solid #6272a4; border-radius: 4px; padding: 4px 8px; }\nQLineEdit, QTextEdit, QPlainTextEdit, QTreeView, QListWidget { background: #1c1a24; border: 1px solid #454158; color: #f8f8f2; }\nQTabBar::tab { background: #282a36; color: #959da5; padding: 6px 12px; }\nQTabBar::tab:selected { background: #454158; color: #50fa7b; font-weight: bold; }\nQStatusBar { background: #19181f; color: #8be9fd; }\n"
+          }
+        ]
+      },
+      "icon": "",
+      "readme": "# Dracula Theme for OpenArise IDE\n\nA high-contrast dark theme with violet accents and vivid syntax coloring.\nThis is a purely declarative extension requiring no executable code.\n"
+    },
+    {
+      "id": "openarise.json-formatter",
+      "name": "JSON Formatter",
+      "version": "1.0.0",
+      "description": "Formats and validates JSON documents with clean indentation.",
+      "author": "OpenArise Community",
+      "category": "Formatters",
+      "download_url": "file://E:/OpenArise_IDE/OpenArise_IDE/assets/extensions/openarise.json-formatter-1.0.0.oaext",
+      "package_hash": "bdf9432fc3e6e2a2f8596633b9ebd43b09823aa590baeb391f6aade31d91b84f",
+      "minimum_openarise_version": "1.0.0",
+      "entry_point": "extension.py",
+      "permissions": [
+        "commands",
+        "editor"
+      ],
+      "contributes": {},
+      "icon": "",
+      "readme": "# JSON Formatter for OpenArise IDE\n\nAutomatically formats raw or minified JSON text into clean, readable multi-line JSON with 2-space indentation.\nCommand: `Format JSON Document` (`Ctrl+Shift+I`).\n"
+    },
+    {
+      "id": "openarise.ai-prompts",
+      "name": "AI Prompt Pack",
+      "version": "1.0.0",
+      "description": "Pre-engineered AI prompts for code review, refactoring, and edge-case testing.",
+      "author": "OpenArise AI Lab",
+      "category": "AI",
+      "download_url": "file://E:/OpenArise_IDE/OpenArise_IDE/assets/extensions/openarise.ai-prompts-1.0.0.oaext",
+      "package_hash": "1789e2083b41d6118360816e7fac674a5c054d0d54cc011d127ddda9d4636b29",
+      "minimum_openarise_version": "1.0.0",
+      "entry_point": "extension.py",
+      "permissions": [
+        "commands",
+        "chat"
+      ],
+      "contributes": {},
+      "icon": "",
+      "readme": "# AI Prompt Pack for OpenArise IDE\n\nStreamlines interactions with Ollama AI by providing instant, structured prompting commands:\n- **AI: Explain Active File**\n- **AI: Refactor Active Code**\n- **AI: Generate Edge Case Tests**\n"
+    }
+  ]
+}

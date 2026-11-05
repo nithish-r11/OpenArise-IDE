@@ -1,0 +1,26 @@
+{
+  "id": "openarise.python-essentials",
+  "name": "Python Essentials",
+  "version": "1.0.0",
+  "description": "Essential Python coding tools, snippet stubs, and selection runner.",
+  "author": "OpenArise Team",
+  "category": "Programming",
+  "minimum_openarise_version": "1.0.0",
+  "entry_point": "extension.py",
+  "permissions": ["commands", "editor", "terminal"],
+  "contributes": {
+    "snippets": [
+      {
+        "prefix": "def_async",
+        "body": "async def example():\n    pass\n",
+        "description": "Asynchronous function boilerplate"
+      },
+      {
+        "prefix": "dataclass_model",
+        "body": "from dataclasses import dataclass\n\n@dataclass\nclass Item:\n    id: str\n    name: str\n",
+        "description": "Python dataclass template"
+      }
+    ]
+  }
+}
+

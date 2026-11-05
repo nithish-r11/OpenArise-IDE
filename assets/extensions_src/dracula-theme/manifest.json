@@ -1,0 +1,20 @@
+{
+  "id": "openarise.theme-dracula",
+  "name": "Dracula Official Theme",
+  "version": "1.0.0",
+  "description": "The famous Dracula dark theme palette for OpenArise IDE.",
+  "author": "Dracula Theme Org",
+  "category": "Themes",
+  "minimum_openarise_version": "1.0.0",
+  "entry_point": null,
+  "permissions": ["themes"],
+  "contributes": {
+    "themes": [
+      {
+        "name": "Dracula Pro",
+        "stylesheet": "QWidget { background: #22212c; color: #f8f8f2; }\nQMainWindow, QDialog { background: #22212c; }\nQMenuBar, QMenu { background: #282a36; color: #f8f8f2; }\nQToolBar { background: #282a36; border: 0; }\nQPushButton { background: #454158; color: #f8f8f2; border: 1px solid #6272a4; border-radius: 4px; padding: 4px 8px; }\nQLineEdit, QTextEdit, QPlainTextEdit, QTreeView, QListWidget { background: #1c1a24; border: 1px solid #454158; color: #f8f8f2; }\nQTabBar::tab { background: #282a36; color: #959da5; padding: 6px 12px; }\nQTabBar::tab:selected { background: #454158; color: #50fa7b; font-weight: bold; }\nQStatusBar { background: #19181f; color: #8be9fd; }\n"
+      }
+    ]
+  }
+}
+

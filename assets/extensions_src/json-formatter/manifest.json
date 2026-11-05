@@ -1,0 +1,12 @@
+{
+  "id": "openarise.json-formatter",
+  "name": "JSON Formatter",
+  "version": "1.0.0",
+  "description": "Formats and validates JSON documents with clean indentation.",
+  "author": "OpenArise Community",
+  "category": "Formatters",
+  "minimum_openarise_version": "1.0.0",
+  "entry_point": "extension.py",
+  "permissions": ["commands", "editor"]
+}
+

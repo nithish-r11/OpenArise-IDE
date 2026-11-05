@@ -1,0 +1,6 @@
+PyQt6>=6.6.1,<7
+requests>=2.31.0,<3
+markdown>=3.5,<4
+Pygments>=2.17,<3
+PyInstaller>=6.3,<7
+Pillow>=10.0.0,<12

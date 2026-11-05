@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download OpenArise IDE – AI-Powered Coding Workspace</title>
+  <meta name="description" content="Official download page for OpenArise IDE v1.0.0 for Windows. An AI-powered local-first coding workspace for building websites and applications.">
+  <link rel="icon" type="image/x-icon" href="assets/branding/openarise.ico">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#download" class="brand">
+        <img src="assets/branding/openarise_master.png" alt="OpenArise Infinity Logo" class="brand-logo" width="32" height="32">
+        <span class="brand-name">OpenArise IDE</span>
+      </a>
+      <nav class="nav-links" id="navLinks">
+        <a href="#download" class="nav-link active">Download</a>
+        <a href="#requirements" class="nav-link">Requirements</a>
+        <a href="#setup" class="nav-link">Setup</a>
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#docs" class="nav-link">Documentation</a>
+      </nav>
+      <div class="header-action">
+        <a href="#download" class="btn btn-outline-sm">Get v1.0.0</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Main Download Section (Hero) -->
+    <section class="section section-download" id="download">
+      <div class="container download-hero">
+        <div class="download-badge">
+          <span class="badge-dot"></span>
+          <span>Version 1.0.0 • Windows x64</span>
+        </div>
+
+        <h1 class="hero-title">OpenArise IDE</h1>
+        <p class="hero-subtitle">
+          Your AI-powered coding workspace. Turn natural-language prompts into working websites and applications.
+        </p>
+
+        <!-- Notification Banner: Pending Publication -->
+        <div class="notice-banner" id="statusBanner">
+          <svg class="notice-icon" viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+          </svg>
+          <div class="notice-text">
+            <strong>Release Status:</strong> Production build v1.0.0 compiled and verified locally. Public download links will be active upon GitHub Release publication.
+          </div>
+        </div>
+
+        <!-- Download Cards Grid -->
+        <div class="download-grid">
+          <!-- Primary: Windows Installer -->
+          <div class="download-card card-primary">
+            <div class="card-header">
+              <div class="platform-icon">
+                <svg viewBox="0 0 88 88" width="32" height="32" fill="#0078d4">
+                  <path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.529l.028 34.453L.028 75.48.005 46.108zM39.697 6.837L87.973 0v41.423l-48.276.324zm48.305 38.995l-.032 41.77-48.273-6.81-.013-35.15z"/>
+                </svg>
+              </div>
+              <div class="card-title-group">
+                <h3 class="card-title">Windows Installer</h3>
+                <span class="card-tag">Recommended</span>
+              </div>
+            </div>
+            <p class="card-desc">Standard setup wizard with Start Menu shortcuts, desktop icon, and automated uninstaller.</p>
+            <div class="card-meta">
+              <span class="meta-item">File size: <strong>106.3 MB</strong></span>
+              <span class="meta-item">Package: <code>OpenAriseIDE-Setup-1.0.0.exe</code></span>
+            </div>
+            <div class="card-actions">
+              <button class="btn btn-primary btn-download" id="downloadInstallerBtn" data-target="installer">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+                  <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+                Download for Windows (x64)
+              </button>
+            </div>
+            <div class="checksum-row">
+              <span class="checksum-label">SHA-256:</span>
+              <code class="checksum-code" title="Click to copy">23f616159b21984e34c59c9b8e738c09eddb12a92c1d59b74e83051cf76d6e46</code>
+              <button class="btn-copy" data-copy="23f616159b21984e34c59c9b8e738c09eddb12a92c1d59b74e83051cf76d6e46" title="Copy SHA-256">Copy</button>
+            </div>
+          </div>
+
+          <!-- Secondary: Portable Executable -->
+          <div class="download-card card-secondary">
+            <div class="card-header">
+              <div class="platform-icon">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="#475569">
+                  <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L11 13.17V7h2v6.17l2.59-2.58L17 12l-5 5z"/>
+                </svg>
+              </div>
+              <div class="card-title-group">
+                <h3 class="card-title">Portable Executable</h3>
+                <span class="card-tag tag-neutral">Zero Install</span>
+              </div>
+            </div>
+            <p class="card-desc">Single standalone executable. Run directly from any folder or USB drive without administrative rights.</p>
+            <div class="card-meta">
+              <span class="meta-item">File size: <strong>105.6 MB</strong></span>
+              <span class="meta-item">Package: <code>OpenAriseIDE.exe</code></span>
+            </div>
+            <div class="card-actions">
+              <button class="btn btn-secondary btn-download" id="downloadPortableBtn" data-target="portable">
+                <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+                  <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                </svg>
+                Download Portable EXE
+              </button>
+            </div>
+            <div class="checksum-row">
+              <span class="checksum-label">SHA-256:</span>
+              <code class="checksum-code" title="Click to copy">e351e3fcfd135e4d626801da7210f2b1ed51a91566af96f1a69ba3aa4d440d2c</code>
+              <button class="btn-copy" data-copy="e351e3fcfd135e4d626801da7210f2b1ed51a91566af96f1a69ba3aa4d440d2c" title="Copy SHA-256">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="download-subtext">
+          Looking for other operating systems? OpenArise IDE currently supports Windows 10/11 x64. Linux and macOS support are planned for upcoming releases.
+        </div>
+      </div>
+    </section>
+
+    <!-- Minimum System Requirements -->
+    <section class="section section-alt" id="requirements">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">System Requirements</h2>
+          <p class="section-desc">OpenArise IDE runs locally on your PC. Check your system specifications before installation.</p>
+        </div>
+
+        <div class="specs-grid">
+          <div class="spec-card">
+            <div class="spec-label">Operating System</div>
+            <div class="spec-value">Windows 10 or 11 (64-bit)</div>
+            <div class="spec-detail">Architecture: x86-64 / AMD64</div>
+          </div>
+          <div class="spec-card">
+            <div class="spec-label">Memory (RAM)</div>
+            <div class="spec-value">8 GB min / 16 GB rec.</div>
+            <div class="spec-detail">16 GB recommended for running 7B AI models locally</div>
+          </div>
+          <div class="spec-card">
+            <div class="spec-label">AI Engine (Prerequisite)</div>
+            <div class="spec-value">Ollama (Local Daemon)</div>
+            <div class="spec-detail">Installed separately from <a href="https://ollama.com" target="_blank" rel="noopener">ollama.com</a></div>
+          </div>
+          <div class="spec-card">
+            <div class="spec-label">Supported Model</div>
+            <div class="spec-value">qwen2.5-coder:7b</div>
+            <div class="spec-detail">Also compatible with <code>1.5b</code>, <code>deepseek-coder</code>, or <code>llama3.2</code></div>
+          </div>
+          <div class="spec-card">
+            <div class="spec-label">Disk Space</div>
+            <div class="spec-value">~500 MB + ~5 GB for Model</div>
+            <div class="spec-detail">Fast SSD storage recommended for local model weights</div>
+          </div>
+          <div class="spec-card">
+            <div class="spec-label">Network &amp; Privacy</div>
+            <div class="spec-value">100% Local-First</div>
+            <div class="spec-detail">Internet required only for initial download; zero cloud calls during coding</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5-Step Installation Guide -->
+    <section class="section" id="setup">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">Installation Instructions</h2>
+          <p class="section-desc">Get started in five straightforward steps.</p>
+        </div>
+
+        <div class="steps-flow">
+          <div class="step-item">
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <h4 class="step-title">Download OpenArise IDE</h4>
+              <p class="step-desc">Choose between the standard Windows installer or the portable executable from the <a href="#download">download section above</a>.</p>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <h4 class="step-title">Install OpenArise IDE</h4>
+              <p class="step-desc">Run <code>OpenAriseIDE-Setup-1.0.0.exe</code> and follow the installation prompts. No administrator privileges are required.</p>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <h4 class="step-title">Install Ollama</h4>
+              <p class="step-desc">Download and install the official Windows Ollama client from <a href="https://ollama.com/download/windows" target="_blank" rel="noopener">ollama.com/download/windows</a>.</p>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <h4 class="step-title">Download Coding Model</h4>
+              <p class="step-desc">Open PowerShell or Command Prompt and download the recommended coding model:</p>
+              <div class="code-box">
+                <span class="code-prompt">PS&gt;</span>
+                <code>ollama pull qwen2.5-coder:7b</code>
+                <button class="btn-copy-code" data-copy="ollama pull qwen2.5-coder:7b" title="Copy Command">Copy</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-number">5</div>
+            <div class="step-content">
+              <h4 class="step-title">Start Coding with AI Agent</h4>
+              <p class="step-desc">Launch OpenArise IDE, click <strong>Open Folder</strong>, and enter your natural-language task in the <strong>AI Agent</strong> panel. Need help? Read our <a href="#ollama-guide">Ollama Setup Guide</a>.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Compact Features & Real Application Preview -->
+    <section class="section section-alt" id="features">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">Core Capabilities</h2>
+          <p class="section-desc">A professional desktop IDE co-engineered for autonomous local AI development.</p>
+        </div>
+
+        <div class="preview-container">
+          <div class="preview-window">
+            <div class="window-chrome">
+              <div class="chrome-dot dot-red"></div>
+              <div class="chrome-dot dot-yellow"></div>
+              <div class="chrome-dot dot-green"></div>
+              <span class="chrome-title">OpenArise IDE – Genuine Application Screenshot</span>
+            </div>
+            <img src="assets/images/openarise_ide_preview.png" alt="OpenArise IDE application window running with File Explorer, Editor, AI Agent panel, and Integrated Terminal" class="preview-img" width="1300" height="820" loading="lazy">
+          </div>
+        </div>
+
+        <div class="features-grid">
+          <div class="feature-item">
+            <div class="feature-icon">🤖</div>
+            <h4 class="feature-title">AI Coding Agent</h4>
+            <p class="feature-desc">Describe your application in natural language. The Agent profiles your workspace, generates multi-step plans, and builds working code.</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">✏️</div>
+            <h4 class="feature-title">Cursor-Level Multi-File Editing</h4>
+            <p class="feature-desc">Create multiple files in a single pass with <code>write_files</code>, or execute surgical target-and-replacement edits with <code>replace_in_file</code>.</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🛡️</div>
+            <h4 class="feature-title">Diff Review &amp; Rollback</h4>
+            <p class="feature-desc">Review every single generated or modified file before accepting. Automated <code>.bak</code> backups and one-click rollback ensure safe iteration.</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">💻</div>
+            <h4 class="feature-title">Integrated Terminal</h4>
+            <p class="feature-desc">Embedded PowerShell terminal with unified stdout/stderr streaming, process lifecycle controls, and clean stop controls.</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔧</div>
+            <h4 class="feature-title">Build, Run &amp; Self-Healing Debug</h4>
+            <p class="feature-desc">Automatic runnable detection (web servers, Python backends). Autonomous self-healing debugger diagnoses syntax errors and writes fixes.</p>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon">🔒</div>
+            <h4 class="feature-title">Local Ollama Privacy</h4>
+            <p class="feature-desc">100% private and offline-capable. All AI model inference runs on your own hardware via local Ollama. Zero code telemetry.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dedicated In-Page Documentation Anchors -->
+    <section class="section" id="docs">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">Documentation</h2>
+          <p class="section-desc">Quick reference guides and official documentation for OpenArise IDE v1.0.0.</p>
+        </div>
+
+        <!-- Documentation Index Anchors Navigation -->
+        <div class="docs-nav-bar">
+          <a href="#readme" class="docs-nav-item active">README</a>
+          <a href="#ollama-guide" class="docs-nav-item">Ollama Setup Guide</a>
+          <a href="#troubleshooting" class="docs-nav-item">Troubleshooting</a>
+          <a href="#release-notes" class="docs-nav-item">Release Notes</a>
+        </div>
+
+        <div class="docs-container">
+          <!-- 1. README Section -->
+          <article class="doc-section" id="readme">
+            <div class="doc-header">
+              <h3 class="doc-title">OpenArise IDE – Overview &amp; README</h3>
+              <span class="doc-badge">v1.0.0</span>
+            </div>
+            <div class="doc-body">
+              <p>OpenArise IDE is a fast, reliable, local-first AI development environment designed to provide a Cursor-level coding workflow powered by local large language models.</p>
+              
+              <h4>Key Architectural Principles</h4>
+              <ul>
+                <li><strong>Local-First Privacy:</strong> Your source code never leaves your computer. All AI reasoning is executed locally via Ollama.</li>
+                <li><strong>Minimal Main Toolbar:</strong> Contains strictly four buttons in exact order: <code>Open Folder</code>, <code>New File</code>, <code>Save</code>, <code>Run Python</code>. Advanced tools remain accessible via top menus and Command Palette (<code>Ctrl+Shift+P</code>).</li>
+                <li><strong>Robust Multi-File Staging:</strong> Multi-file operations are staged into an atomic journal and presented for user approval in an interactive Diff Review dialog.</li>
+              </ul>
+
+              <h4>Default Keyboard Shortcuts</h4>
+              <div class="table-responsive">
+                <table class="doc-table">
+                  <thead>
+                    <tr><th>Action</th><th>Shortcut</th><th>Scope</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>Command Palette</td><td><code>Ctrl + Shift + P</code></td><td>Global</td></tr>
+                    <tr><td>Settings</td><td><code>Ctrl + ,</code></td><td>Global</td></tr>
+                    <tr><td>Save Active File</td><td><code>Ctrl + S</code></td><td>Editor</td></tr>
+                    <tr><td>Run Active Python File</td><td><code>F5</code></td><td>Editor / Terminal</td></tr>
+                    <tr><td>Rename File or Folder</td><td><code>F2</code></td><td>File Explorer</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </article>
+
+          <!-- 2. Ollama Setup Guide Section -->
+          <article class="doc-section" id="ollama-guide">
+            <div class="doc-header">
+              <h3 class="doc-title">Ollama Setup &amp; Model Configuration Guide</h3>
+              <span class="doc-badge">Prerequisite</span>
+            </div>
+            <div class="doc-body">
+              <p>OpenArise IDE connects to a local Ollama daemon running on <code>http://127.0.0.1:11434</code>. Follow these instructions to configure your environment.</p>
+
+              <h4>1. Install Ollama</h4>
+              <p>Download the official installer from <a href="https://ollama.com/download/windows" target="_blank" rel="noopener">ollama.com/download/windows</a> and run the installer. Verify it is running by executing:</p>
+              <div class="code-box">
+                <code>ollama --version</code>
+                <button class="btn-copy-code" data-copy="ollama --version" title="Copy Command">Copy</button>
+              </div>
+
+              <h4>2. Pull Recommended Models</h4>
+              <div class="table-responsive">
+                <table class="doc-table">
+                  <thead>
+                    <tr><th>Model</th><th>Parameters</th><th>System Recommendation</th><th>Pull Command</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><strong>qwen2.5-coder:7b</strong><br><em>(Recommended Default)</em></td>
+                      <td>7.6B</td>
+                      <td>16 GB RAM / 6GB+ VRAM</td>
+                      <td><code>ollama pull qwen2.5-coder:7b</code></td>
+                    </tr>
+                    <tr>
+                      <td><strong>qwen2.5-coder:1.5b</strong><br><em>(Fast / Low-Spec)</em></td>
+                      <td>1.5B</td>
+                      <td>8 GB RAM / Any CPU</td>
+                      <td><code>ollama pull qwen2.5-coder:1.5b</code></td>
+                    </tr>
+                    <tr>
+                      <td><strong>deepseek-coder:6.7b</strong></td>
+                      <td>6.7B</td>
+                      <td>16 GB RAM / 6GB+ VRAM</td>
+                      <td><code>ollama pull deepseek-coder:6.7b</code></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h4>3. Verify Connectivity</h4>
+              <p>In OpenArise IDE, check the bottom status bar for <strong>Ollama: Connected</strong>. Select your model from the dropdown in the AI Chat or AI Agent panel.</p>
+            </div>
+          </article>
+
+          <!-- 3. Troubleshooting Section -->
+          <article class="doc-section" id="troubleshooting">
+            <div class="doc-header">
+              <h3 class="doc-title">Troubleshooting &amp; Diagnostics</h3>
+              <span class="doc-badge">Self-Help</span>
+            </div>
+            <div class="doc-body">
+              <h4>Status Bar Shows "Ollama: Disconnected"</h4>
+              <p>The local Ollama service is not running or listening on port 11434.</p>
+              <ul>
+                <li>Open PowerShell and run <code>ollama serve</code> to start the service manually.</li>
+                <li>In OpenArise IDE, choose <strong>AI &gt; Refresh Models</strong> or wait for the automatic background check.</li>
+                <li>Confirm port 11434 is not blocked: <code>Get-NetTCPConnection -LocalPort 11434</code>.</li>
+              </ul>
+
+              <h4>Agent Task Latency on CPU</h4>
+              <p>Local 7B models generate approximately 10–20 tokens/second on standard multi-core CPUs. For faster execution on low-spec PCs, switch to <code>qwen2.5-coder:1.5b</code> in the model dropdown.</p>
+
+              <h4>Terminal Port Conflicts</h4>
+              <p>If a local web server (e.g., <code>python -m http.server 8000</code>) fails because the port is already in use, click <strong>Stop</strong> in the terminal toolbar to terminate running processes, or run:</p>
+              <div class="code-box">
+                <code>Get-Process python | Stop-Process -Force</code>
+                <button class="btn-copy-code" data-copy="Get-Process python | Stop-Process -Force" title="Copy Command">Copy</button>
+              </div>
+            </div>
+          </article>
+
+          <!-- 4. Release Notes Section -->
+          <article class="doc-section" id="release-notes">
+            <div class="doc-header">
+              <h3 class="doc-title">OpenArise IDE v1.0.0 Release Notes</h3>
+              <span class="doc-badge">Latest</span>
+            </div>
+            <div class="doc-body">
+              <p><strong>Release Date:</strong> 2026-11-05 • <strong>Status:</strong> Production Release</p>
+              
+              <h4>Highlights</h4>
+              <ul>
+                <li><strong>AI Agent V1.0:</strong> AST/regex symbol extraction, reusable workspace profiling, compact prompt summaries (~250 tokens), <code>write_files</code>, and <code>replace_in_file</code>.</li>
+                <li><strong>Autonomous Self-Healing:</strong> Diagnoses syntax errors and applies surgical repairs automatically.</li>
+                <li><strong>Minimal 4-Button Toolbar:</strong> Clean toolbar containing strictly <code>Open Folder</code>, <code>New File</code>, <code>Save</code>, <code>Run Python</code>.</li>
+                <li><strong>Infinity Logo Branding:</strong> Restrained to the Windows title bar and taskbar only.</li>
+                <li><strong>Inno Setup &amp; Portable EXE:</strong> Full Windows installer with clean user-level installation and uninstallation.</li>
+              </ul>
+
+              <h4>Verified Checksums</h4>
+              <div class="table-responsive">
+                <table class="doc-table">
+                  <thead>
+                    <tr><th>Package</th><th>Size</th><th>SHA-256</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>OpenAriseIDE-Setup-1.0.0.exe</code></td>
+                      <td>106.3 MB</td>
+                      <td><code class="checksum-code">23f616159b21984e34c59c9b8e738c09eddb12a92c1d59b74e83051cf76d6e46</code></td>
+                    </tr>
+                    <tr>
+                      <td><code>OpenAriseIDE.exe</code></td>
+                      <td>105.6 MB</td>
+                      <td><code class="checksum-code">e351e3fcfd135e4d626801da7210f2b1ed51a91566af96f1a69ba3aa4d440d2c</code></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Clean, Professional Footer -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <img src="assets/branding/openarise_master.png" alt="OpenArise" width="24" height="24" class="footer-logo">
+        <span class="footer-title">OpenArise IDE</span>
+        <span class="footer-ver">v1.0.0</span>
+      </div>
+      <div class="footer-links">
+        <a href="#download">Download</a>
+        <a href="#requirements">Requirements</a>
+        <a href="#setup">Setup</a>
+        <a href="#docs">Documentation</a>
+        <a href="#readme">README</a>
+        <a href="#release-notes">Release Notes</a>
+      </div>
+      <div class="footer-copy">
+        &copy; 2026 OpenArise Team. Local-first software. No tracking or mandatory telemetry.
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/main.js"></script>
+</body>
+</html>
+

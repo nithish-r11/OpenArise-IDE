@@ -1,0 +1,12 @@
+{
+  "id": "openarise.ai-prompts",
+  "name": "AI Prompt Pack",
+  "version": "1.0.0",
+  "description": "Pre-engineered AI prompts for code review, refactoring, and edge-case testing.",
+  "author": "OpenArise AI Lab",
+  "category": "AI",
+  "minimum_openarise_version": "1.0.0",
+  "entry_point": "extension.py",
+  "permissions": ["commands", "chat"]
+}
+

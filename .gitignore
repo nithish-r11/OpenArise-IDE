@@ -1,0 +1,66 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Packaging, Builds & Binaries
+build/
+dist/
+*.egg-info/
+*.egg
+*.spec.bak
+
+# Windows Executables & Installers
+*.exe
+*.msi
+*.dll
+*.pyd
+*.obj
+*.bin
+*.iso
+*.dmg
+*.pkg
+
+# Keep release documentation and checksums tracked while ignoring binaries
+release/**/*.exe
+
+# Temporary files, logs, and scratch workspaces
+scratch/
+*.log
+install.log
+exe_verification_result.json
+temp/
+tmp/
+openarise_recovery/
+
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+id_rsa*
+secrets.*
+
+# OS and Editor specific
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
