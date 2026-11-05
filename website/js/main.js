@@ -6,10 +6,10 @@
 // Centralized Configurable Download URLs
 // When publishing to GitHub Releases, update isPublished to true and set real URLs.
 const DOWNLOAD_CONFIG = {
-  isPublished: false,
+  isPublished: true,
   version: "1.0.0",
-  installerUrl: "https://github.com/OpenArise/OpenArise_IDE/releases/download/v1.0.0/OpenAriseIDE-Setup-1.0.0.exe",
-  portableUrl: "https://github.com/OpenArise/OpenArise_IDE/releases/download/v1.0.0/OpenAriseIDE.exe",
+  installerUrl: "https://github.com/nithish-r11/OpenArise-IDE/releases/download/v1.0.0/OpenAriseIDE-Setup-1.0.0.exe",
+  portableUrl: "https://github.com/nithish-r11/OpenArise-IDE/releases/download/v1.0.0/OpenAriseIDE.exe",
   releaseNotesUrl: "#release-notes"
 };
 
